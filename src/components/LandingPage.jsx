@@ -7,6 +7,7 @@ const {
   CheckCircle, Briefcase, HelpCircle, Upload, ArrowRight, ShieldAlert,
   Landmark, FileText, Globe, Megaphone
 } = Icons;
+import { API_BASE_URL } from '../config';
 
 const PRICE_PER_SERVICE = 250;
 
@@ -122,7 +123,7 @@ const LandingPage = ({ onAdminClick }) => {
     // Fetch Services
     const fetchServices = async () => {
       try {
-        const res = await fetch('http://localhost:5000/api/services');
+        const res = await fetch(`${API_BASE_URL}/api/services`);
         if (res.ok) {
           const data = await res.json();
           setServicesList(data);
@@ -135,7 +136,7 @@ const LandingPage = ({ onAdminClick }) => {
     // Fetch Visa Pathways
     const fetchPathways = async () => {
       try {
-        const res = await fetch('http://localhost:5000/api/visa-pathways');
+        const res = await fetch(`${API_BASE_URL}/api/visa-pathways`);
         if (res.ok) {
           const data = await res.json();
           setVisaPathwaysList(data);
@@ -148,7 +149,7 @@ const LandingPage = ({ onAdminClick }) => {
     fetchServices();
     fetchPathways();
 
-    const socket = io('http://localhost:5000');
+    const socket = io(API_BASE_URL);
 
     socket.on('service_created', (newService) => {
       setServicesList(prev => {
@@ -258,7 +259,7 @@ const LandingPage = ({ onAdminClick }) => {
 
     try {
       // 1. Create order on backend
-      const orderResponse = await fetch('http://localhost:5000/api/payment/create-order', {
+      const orderResponse = await fetch(`${API_BASE_URL}/api/payment/create-order`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ amount: totalAmount })
@@ -321,7 +322,7 @@ const LandingPage = ({ onAdminClick }) => {
             submissionData.append('razorpay_order_id', response.razorpay_order_id);
             submissionData.append('razorpay_signature', response.razorpay_signature);
 
-            const bookingResponse = await fetch('http://localhost:5000/api/bookings', {
+            const bookingResponse = await fetch(`${API_BASE_URL}/api/bookings`, {
               method: 'POST',
               body: submissionData
             });
