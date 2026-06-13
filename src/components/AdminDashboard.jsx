@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { API_BASE_URL } from '../config';
+import { API_URL, SOCKET_URL } from '../config';
 import { io } from 'socket.io-client';
 import toast from 'react-hot-toast';
 import { 
@@ -102,7 +102,7 @@ const AdminDashboard = ({ onLogout }) => {
     setLoading(true);
     const token = localStorage.getItem('adminToken');
     try {
-      const res = await fetch(`${API_BASE_URL}/api/bookings/${editProfileData._id}`, {
+      const res = await fetch(`${API_URL}/api/bookings/${editProfileData._id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -155,7 +155,7 @@ const AdminDashboard = ({ onLogout }) => {
     setLoading(true);
     const token = localStorage.getItem('adminToken');
     try {
-      const res = await fetch(`${API_BASE_URL}/api/bookings/${selectedBooking._id}/schedule`, {
+      const res = await fetch(`${API_URL}/api/bookings/${selectedBooking._id}/schedule`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -197,7 +197,7 @@ const AdminDashboard = ({ onLogout }) => {
     }
 
     try {
-      const res = await fetch(`${API_BASE_URL}/api/bookings/${selectedBooking._id}/post-meeting`, {
+      const res = await fetch(`${API_URL}/api/bookings/${selectedBooking._id}/post-meeting`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`
@@ -224,7 +224,7 @@ const AdminDashboard = ({ onLogout }) => {
     if (!window.confirm('Mark this process as Complete?')) return;
     const token = localStorage.getItem('adminToken');
     try {
-      const res = await fetch(`${API_BASE_URL}/api/bookings/${id}/complete`, {
+      const res = await fetch(`${API_URL}/api/bookings/${id}/complete`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`
@@ -244,7 +244,7 @@ const AdminDashboard = ({ onLogout }) => {
     if (!window.confirm('Are you sure you want to delete this booking? This action cannot be undone.')) return;
     const token = localStorage.getItem('adminToken');
     try {
-      const response = await fetch(`${API_BASE_URL}/api/bookings/${id}`, {
+      const response = await fetch(`${API_URL}/api/bookings/${id}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`
@@ -267,7 +267,7 @@ const AdminDashboard = ({ onLogout }) => {
     if (!token) return;
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/bookings`, {
+      const response = await fetch(`${API_URL}/api/bookings`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -286,7 +286,7 @@ const AdminDashboard = ({ onLogout }) => {
   // Fetch Services List
   const fetchServicesList = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/services`);
+      const response = await fetch(`${API_URL}/api/services`);
       if (response.ok) {
         const data = await response.json();
         setServicesList(data);
@@ -299,7 +299,7 @@ const AdminDashboard = ({ onLogout }) => {
   // Fetch Visa Pathways List
   const fetchVisaPathwaysList = async () => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/visa-pathways`);
+      const response = await fetch(`${API_URL}/api/visa-pathways`);
       if (response.ok) {
         const data = await response.json();
         setVisaPathwaysList(data);
@@ -315,7 +315,7 @@ const AdminDashboard = ({ onLogout }) => {
     fetchVisaPathwaysList();
 
     // Socket.io Connection
-    const socket = io(`${API_BASE_URL}`);
+    const socket = io(`${SOCKET_URL}`);
 
     socket.on('connect', () => {
       console.log('Dashboard connected to websocket');
@@ -390,7 +390,7 @@ const AdminDashboard = ({ onLogout }) => {
 
     const token = localStorage.getItem('adminToken');
     try {
-      const response = await fetch(`${API_BASE_URL}/api/bookings/${selectedBooking._id}`, {
+      const response = await fetch(`${API_URL}/api/bookings/${selectedBooking._id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -450,8 +450,8 @@ const AdminDashboard = ({ onLogout }) => {
     e.preventDefault();
     const token = localStorage.getItem('adminToken');
     const url = editingService 
-      ? `${API_BASE_URL}/api/services/${editingService._id}`
-      : `${API_BASE_URL}/api/services`;
+      ? `${API_URL}/api/services/${editingService._id}`
+      : `${API_URL}/api/services`;
     const method = editingService ? 'PUT' : 'POST';
 
     try {
@@ -487,7 +487,7 @@ const AdminDashboard = ({ onLogout }) => {
     if (!window.confirm('Are you sure you want to delete this service?')) return;
     const token = localStorage.getItem('adminToken');
     try {
-      const response = await fetch(`${API_BASE_URL}/api/services/${id}`, {
+      const response = await fetch(`${API_URL}/api/services/${id}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`
@@ -529,8 +529,8 @@ const AdminDashboard = ({ onLogout }) => {
     e.preventDefault();
     const token = localStorage.getItem('adminToken');
     const url = editingPathway 
-      ? `${API_BASE_URL}/api/visa-pathways/${editingPathway._id}`
-      : `${API_BASE_URL}/api/visa-pathways`;
+      ? `${API_URL}/api/visa-pathways/${editingPathway._id}`
+      : `${API_URL}/api/visa-pathways`;
     const method = editingPathway ? 'PUT' : 'POST';
 
     try {
@@ -566,7 +566,7 @@ const AdminDashboard = ({ onLogout }) => {
     if (!window.confirm('Are you sure you want to delete this visa pathway?')) return;
     const token = localStorage.getItem('adminToken');
     try {
-      const response = await fetch(`${API_BASE_URL}/api/visa-pathways/${id}`, {
+      const response = await fetch(`${API_URL}/api/visa-pathways/${id}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`
@@ -1213,7 +1213,7 @@ const AdminDashboard = ({ onLogout }) => {
                       {selectedBooking.placementDetails?.cvPath ? (
                         <div className="detail-item" style={{ marginTop: '6px' }}>
                           <a 
-                            href={`${API_BASE_URL}${selectedBooking.placementDetails.cvPath}`} 
+                            href={`${API_URL}${selectedBooking.placementDetails.cvPath}`} 
                             target="_blank" 
                             rel="noreferrer" 
                             className="cv-download-link"
