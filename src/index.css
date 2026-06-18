@@ -1254,22 +1254,44 @@ h1, h2, h3, h4, h5, h6 {
   color: var(--text-muted);
   font-size: 14.5px;
   line-height: 1.6;
-  margin-bottom: 30px;
+  margin-bottom: 24px;
 }
-.success-modal button {
+.success-modal-calendly-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   background: var(--primary);
   color: #fff;
-  border: none;
-  padding: 12px 40px;
+  text-decoration: none;
+  padding: 14px 28px;
+  border-radius: var(--radius-sm);
+  font-size: 15px;
+  font-weight: 700;
+  margin-bottom: 12px;
+  transition: all 0.2s;
+}
+.success-modal-calendly-btn:hover {
+  background: var(--primary-hover);
+  transform: translateY(-1px);
+}
+.success-modal-done-btn,
+.success-modal button {
+  background: transparent;
+  color: var(--text-muted);
+  border: 1px solid var(--border-color);
+  padding: 10px 32px;
   border-radius: var(--radius-sm);
   font-size: 14px;
-  font-weight: 700;
+  font-weight: 600;
   cursor: pointer;
   transition: all 0.2s;
 }
+.success-modal-done-btn:hover,
 .success-modal button:hover {
-  background: var(--primary-hover);
-  transform: translateY(-1px);
+  background: #f8fafc;
+  color: var(--dark);
+  transform: none;
 }
 
 /* ===== FOOTER ===== */

@@ -10,6 +10,7 @@ const {
 import { API_URL, SOCKET_URL } from '../config';
 
 const PRICE_PER_SERVICE = 250;
+const CALENDLY_URL = 'https://calendly.com/hello-routeup/30min';
 
 const JOBS_BY_INDUSTRY = {
   "Skilled Trades — Welding": ["Welding — Engineering", "Welding — Entry Level", "Welding — Pipe Welding", "Welding — Plate & Structural", "Welding — Specialist", "Welding — Supervision"],
@@ -1087,9 +1088,18 @@ const LandingPage = ({ onAdminClick }) => {
             <div className="success-modal-icon">
               <Check size={36} />
             </div>
-            <h3>Booking Confirmed!</h3>
-            <p>Thank you! Your advisory session has been booked. Our team will contact you within 24 hours on WhatsApp to schedule your 45-minute session.</p>
-            <button onClick={handleCloseModal}>Done</button>
+            <h3>Payment Successful!</h3>
+            <p>Thank you! Your booking is confirmed. Please select your preferred 30-minute session time below.</p>
+            <a
+              href={CALENDLY_URL}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="success-modal-calendly-btn"
+            >
+              <ExternalLink size={18} />
+              Select Meeting Time
+            </a>
+            <button type="button" className="success-modal-done-btn" onClick={handleCloseModal}>Done</button>
           </div>
         </div>
       )}
