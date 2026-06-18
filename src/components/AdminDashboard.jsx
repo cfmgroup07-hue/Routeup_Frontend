@@ -28,6 +28,13 @@ const IconMap = {
 const AdminDashboard = ({ onLogout }) => {
   const [bookings, setBookings] = useState([]);
   const [loading, setLoading] = useState(true);
+
+  const handleUnauthorized = () => {
+    localStorage.removeItem('adminToken');
+    localStorage.removeItem('adminEmail');
+    toast.error('Session expired. Please log in again.');
+    onLogout();
+  };
   const [selectedBooking, setSelectedBooking] = useState(null);
   const [socketNotification, setSocketNotification] = useState(null);
   
@@ -275,6 +282,8 @@ const AdminDashboard = ({ onLogout }) => {
       if (response.ok) {
         const data = await response.json();
         setBookings(data);
+      } else if (response.status === 401) {
+        handleUnauthorized();
       }
     } catch (error) {
       console.error('Failed to fetch bookings:', error);
@@ -473,6 +482,8 @@ const AdminDashboard = ({ onLogout }) => {
       if (response.ok) {
         setIsServiceModalOpen(false);
         setEditingService(null);
+      } else if (response.status === 401) {
+        handleUnauthorized();
       } else {
         const err = await response.json();
         toast.error(`Failed to save service: ${err.message}`);
