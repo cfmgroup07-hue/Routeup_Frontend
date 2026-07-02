@@ -1,16 +1,15 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { io } from 'socket.io-client';
 import * as Icons from 'lucide-react';
 const { 
   ShieldCheck, Check, AlertTriangle, AlertCircle, FileCheck, 
-  ExternalLink, User, Phone, Mail, Award, MapPin, GraduationCap, 
+  User, Phone, Mail, Award, MapPin, GraduationCap, 
   CheckCircle, Briefcase, HelpCircle, Upload, ArrowRight, ShieldAlert,
   Landmark, FileText, Globe, Megaphone
 } = Icons;
 import { API_URL, SOCKET_URL } from '../config';
 
 const PRICE_PER_SERVICE = 250;
-const CALENDLY_URL = 'https://calendly.com/hello-routeup/30min';
 
 const JOBS_BY_INDUSTRY = {
   "Skilled Trades — Welding": ["Welding — Engineering", "Welding — Entry Level", "Welding — Pipe Welding", "Welding — Plate & Structural", "Welding — Specialist", "Welding — Supervision"],
@@ -118,8 +117,7 @@ const LandingPage = ({ onAdminClick }) => {
 
   const [cvFile, setCvFile] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [paymentStep, setPaymentStep] = useState('none'); // 'none', 'checkout', 'success'
-  const calendlyRef = useRef(null);
+  const [paymentStep, setPaymentStep] = useState('none'); // 'none', 'success'
 
   useEffect(() => {
     // Fetch Services
@@ -247,48 +245,6 @@ const LandingPage = ({ onAdminClick }) => {
       document.body.appendChild(script);
     });
   };
-
-  const loadCalendlyScript = () => {
-    return new Promise((resolve) => {
-      if (window.Calendly) {
-        resolve(true);
-        return;
-      }
-      const existing = document.querySelector('script[src*="calendly.com"]');
-      if (existing) {
-        existing.addEventListener('load', () => resolve(true));
-        existing.addEventListener('error', () => resolve(false));
-        return;
-      }
-      const script = document.createElement('script');
-      script.src = 'https://assets.calendly.com/assets/external/widget.js';
-      script.async = true;
-      script.onload = () => resolve(true);
-      script.onerror = () => resolve(false);
-      document.body.appendChild(script);
-    });
-  };
-
-  useEffect(() => {
-    if (paymentStep !== 'success' || !calendlyRef.current) return;
-
-    const initCalendly = async () => {
-      const loaded = await loadCalendlyScript();
-      if (loaded && window.Calendly && calendlyRef.current) {
-        calendlyRef.current.innerHTML = '';
-        window.Calendly.initInlineWidget({
-          url: CALENDLY_URL,
-          parentElement: calendlyRef.current,
-          prefill: {
-            name: formData.fullName,
-            email: formData.email
-          }
-        });
-      }
-    };
-
-    initCalendly();
-  }, [paymentStep, formData.fullName, formData.email]);
 
   const handleInitiateBooking = async () => {
     if (!validateForm()) return;
@@ -1127,24 +1083,18 @@ const LandingPage = ({ onAdminClick }) => {
       {/* SUCCESS CONFIRMATION MODAL */}
       {paymentStep === 'success' && (
         <div className="modal-overlay">
-          <div className="success-modal success-modal--calendly">
-            <div className="success-modal-header">
-              <div className="success-modal-icon">
-                <Check size={36} />
-              </div>
-              <h3>Payment Successful!</h3>
-              <p>Thank you! Your booking is confirmed. Please select your preferred 30-minute session time below.</p>
+          <div className="success-modal">
+            <div className="success-modal-icon">
+              <Check size={36} />
             </div>
-            <div ref={calendlyRef} className="success-modal-calendly-embed" />
-            <a
-              href={CALENDLY_URL}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="success-modal-calendly-link"
-            >
-              <ExternalLink size={14} />
-              Open in new tab
-            </a>
+            <h3>Payment Successful!</h3>
+            <p>
+              Thank you, <strong>{formData.fullName}</strong>! Your appointment has been booked successfully.
+            </p>
+            <p>
+              A confirmation email has been sent to <strong>{formData.email}</strong> with your booking details.
+              Our team will share the meeting link with you shortly.
+            </p>
             <button type="button" className="success-modal-done-btn" onClick={handleCloseModal}>Done</button>
           </div>
         </div>
