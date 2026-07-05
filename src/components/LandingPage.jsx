@@ -1,13 +1,14 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { io } from 'socket.io-client';
 import * as Icons from 'lucide-react';
 const { 
   ShieldCheck, Check, AlertTriangle, AlertCircle, FileCheck, 
   User, Phone, Mail, Award, MapPin, GraduationCap, 
   CheckCircle, Briefcase, HelpCircle, Upload, ArrowRight, ShieldAlert,
-  Landmark, FileText, Globe, Megaphone
+  Landmark, FileText, Globe, Megaphone, BookOpen, Lightbulb, Target, Plane
 } = Icons;
 import { API_URL, SOCKET_URL } from '../config';
+import { getFlagImageUrl } from '../utils/countries';
 
 const PRICE_PER_SERVICE = 250;
 
@@ -36,7 +37,7 @@ const JOBS_BY_INDUSTRY = {
 
 const INDUSTRY_LIST = Object.keys(JOBS_BY_INDUSTRY).sort();
 
-import CustomSelect from './CustomSelect';
+import AutocompleteInput from './AutocompleteInput';
 
 const EDUCATION_OPTIONS = [
   { value: "Below 10th", label: "Below 10th" },
@@ -91,6 +92,106 @@ const EXP_OPTIONS = [
 ];
 
 const INDUSTRY_DROPDOWN_OPTIONS = INDUSTRY_LIST.map(ind => ({ value: ind, label: ind }));
+
+const GUIDE_COUNTRIES = [
+  'UAE / Dubai',
+  'Saudi Arabia',
+  'Qatar',
+  'Kuwait',
+  'Oman',
+  'Bahrain',
+  'Australia',
+  'Canada',
+  'United Kingdom',
+  'Germany',
+  'New Zealand',
+  'Singapore',
+  'Norway',
+  'USA'
+];
+
+const SPEC_INDUSTRIES = [
+  'Welding',
+  'Electrical',
+  'HVAC',
+  'Fitting & Pipefitting',
+  'Plumbing',
+  'Painting',
+  'Construction',
+  'Aviation',
+  'Shipyard Operations',
+  'Rigging & Lifting',
+  'Offshore Oil & Gas',
+  'Transport & Logistics',
+];
+
+const ALL_JOB_OPTIONS = [...new Set(Object.values(JOBS_BY_INDUSTRY).flat())].map((job) => ({
+  value: job,
+  label: job,
+}));
+
+const getJobTitleOptions = (industry) => {
+  if (industry && JOBS_BY_INDUSTRY[industry]) {
+    return JOBS_BY_INDUSTRY[industry].map((job) => ({ value: job, label: job }));
+  }
+  return ALL_JOB_OPTIONS;
+};
+
+const CAREER_PATHS_COUNT = Object.values(JOBS_BY_INDUSTRY).reduce(
+  (sum, jobs) => sum + jobs.length,
+  0
+);
+const INDUSTRIES_COUNT = INDUSTRY_LIST.length;
+
+const LiveCounter = ({ target, suffix = '+' }) => {
+  const [count, setCount] = useState(0);
+  const ref = useRef(null);
+  const hasAnimated = useRef(false);
+
+  useEffect(() => {
+    hasAnimated.current = false;
+    setCount(0);
+  }, [target]);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || target <= 0) return;
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry.isIntersecting || hasAnimated.current) return;
+        hasAnimated.current = true;
+
+        const duration = 2000;
+        const startTime = performance.now();
+
+        const animate = (now) => {
+          const progress = Math.min((now - startTime) / duration, 1);
+          const eased = 1 - Math.pow(1 - progress, 3);
+          setCount(Math.floor(eased * target));
+          if (progress < 1) {
+            requestAnimationFrame(animate);
+          } else {
+            setCount(target);
+          }
+        };
+
+        requestAnimationFrame(animate);
+      },
+      { threshold: 0.3 }
+    );
+
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [target]);
+
+  return (
+    <h3 ref={ref}>
+      {count}
+      {suffix}
+    </h3>
+  );
+};
 
 const LandingPage = ({ onAdminClick }) => {
   const [formData, setFormData] = useState({
@@ -196,9 +297,20 @@ const LandingPage = ({ onAdminClick }) => {
     };
   }, []);
 
+  const heroStats = [
+    { target: CAREER_PATHS_COUNT, label: 'Career Paths Mapped' },
+    { target: INDUSTRIES_COUNT, label: 'Industries Covered' },
+    { target: visaPathwaysList.length, label: 'Countries for Migration' },
+  ];
+
   const handleInputChange = (e) => {
     const { id, value } = e.target;
-    setFormData(prev => ({ ...prev, [id]: value }));
+    setFormData(prev => {
+      if (id === 'careerIndustry' && value !== prev.careerIndustry) {
+        return { ...prev, [id]: value, careerJobTitle: '' };
+      }
+      return { ...prev, [id]: value };
+    });
   };
 
   const handleServiceChange = (serviceKey) => {
@@ -416,13 +528,16 @@ const LandingPage = ({ onAdminClick }) => {
         <p>Expert guidance on skilled trades, overseas jobs, visa & migration pathways. From ITI to international careers - we show you the route up.</p>
         
         <button onClick={scrollToForm} className="hero-cta">
-          Book Your Session - Rs.250 <ArrowRight size={18} />
+          Book Your Session <ArrowRight size={18} />
         </button>
 
         <div className="hero-stats">
-          <div className="stat"><h3>460+</h3><p>Career Paths Mapped</p></div>
-          <div className="stat"><h3>20+</h3><p>Industries Covered</p></div>
-          <div className="stat"><h3>15+</h3><p>Countries for Migration</p></div>
+          {heroStats.map((stat) => (
+            <div className="stat" key={stat.label}>
+              <LiveCounter key={stat.target} target={stat.target} />
+              <p>{stat.label}</p>
+            </div>
+          ))}
         </div>
       </header>
 
@@ -444,7 +559,7 @@ const LandingPage = ({ onAdminClick }) => {
               <h3>Why We Do This</h3>
               <p>Every year, thousands of young Indians are cheated by fake agents promising overseas jobs. They pay lakhs, get nothing, and lose years of their life to scams.</p>
               <p>We started RouteUp because we believe that honest, affordable career advice should be accessible to every worker — not just those who can afford expensive consultants or have connections.</p>
-              <p>For just Rs.250, you get a 45-minute session that can change the direction of your career. No hidden fees. No false promises. Just clear guidance on what's realistic, what's required, and how to get there safely.</p>
+              <p>For just Rs.250, you get a 60-minute session that can change the direction of your career. No hidden fees. No false promises. Just clear guidance on what's realistic, what's required, and how to get there safely.</p>
               
               <div className="why-values">
                 <div className="why-value"><Check size={16} /> No Fake Promises</div>
@@ -457,41 +572,48 @@ const LandingPage = ({ onAdminClick }) => {
 
           {/* INDUSTRIES & COUNTRIES SPECS */}
           <div className="spec-section">
-            <div className="spec-block">
-              <h3>Specialized <span>Industries</span></h3>
+            <div className="spec-block spec-block-industries">
+              <div className="spec-block-header">
+                <div className="spec-block-icon">
+                  <Briefcase size={22} />
+                </div>
+                <div className="spec-block-title">
+                  <h3>Specialized Industries</h3>
+                  <p>Trade & skilled career paths we cover</p>
+                </div>
+              </div>
               <div className="spec-tags">
-                <span className="spec-tag"><Briefcase size={14} /> Welding</span>
-                <span className="spec-tag"><Briefcase size={14} /> Electrical</span>
-                <span className="spec-tag"><Briefcase size={14} /> HVAC</span>
-                <span className="spec-tag"><Briefcase size={14} /> Fitting & Pipefitting</span>
-                <span className="spec-tag"><Briefcase size={14} /> Plumbing</span>
-                <span className="spec-tag"><Briefcase size={14} /> Painting</span>
-                <span className="spec-tag"><Briefcase size={14} /> Construction</span>
-                <span className="spec-tag"><Briefcase size={14} /> Aviation</span>
-                <span className="spec-tag"><Briefcase size={14} /> Shipyard Operations</span>
-                <span className="spec-tag"><Briefcase size={14} /> Rigging & Lifting</span>
-                <span className="spec-tag"><Briefcase size={14} /> Offshore Oil & Gas</span>
-                <span className="spec-tag"><Briefcase size={14} /> Transport & Logistics</span>
+                {SPEC_INDUSTRIES.map((industry) => (
+                  <span className="spec-tag" key={industry}>
+                    <span className="spec-tag-icon"><Briefcase size={12} /></span>
+                    {industry}
+                  </span>
+                ))}
               </div>
             </div>
 
-            <div className="spec-block">
-              <h3>Countries <span>We Guide For</span></h3>
+            <div className="spec-block spec-block-countries">
+              <div className="spec-block-header">
+                <div className="spec-block-icon">
+                  <Globe size={22} />
+                </div>
+                <div className="spec-block-title">
+                  <h3>Countries We Guide For</h3>
+                  <p>Overseas migration & work pathways</p>
+                </div>
+              </div>
               <div className="spec-tags">
-                <span className="spec-tag">🇦🇪 UAE / Dubai</span>
-                <span className="spec-tag">🇸🇦 Saudi Arabia</span>
-                <span className="spec-tag">🇶🇦 Qatar</span>
-                <span className="spec-tag">🇰🇼 Kuwait</span>
-                <span className="spec-tag">🇴🇲 Oman</span>
-                <span className="spec-tag">🇧🇭 Bahrain</span>
-                <span className="spec-tag">🇦🇺 Australia</span>
-                <span className="spec-tag">🇨🇦 Canada</span>
-                <span className="spec-tag">🇬🇧 United Kingdom</span>
-                <span className="spec-tag">🇩🇪 Germany</span>
-                <span className="spec-tag">🇳🇿 New Zealand</span>
-                <span className="spec-tag">🇸🇬 Singapore</span>
-                <span className="spec-tag">🇳🇴 Norway</span>
-                <span className="spec-tag">🇺🇸 USA</span>
+                {GUIDE_COUNTRIES.map((country) => (
+                  <span className="spec-tag spec-tag-country" key={country}>
+                    <img
+                      src={getFlagImageUrl(country, '', 'w20')}
+                      alt=""
+                      className="spec-tag-flag"
+                      loading="lazy"
+                    />
+                    {country}
+                  </span>
+                ))}
               </div>
             </div>
           </div>
@@ -514,7 +636,7 @@ const LandingPage = ({ onAdminClick }) => {
               </div>
               <h3>{service.title}</h3>
               <p>{service.description}</p>
-              <div className="service-price">Rs.{service.price} <span>/ 45 min session</span></div>
+              <div className="service-price">Rs.{service.price} <span>/ 60 min session</span></div>
             </div>
           ))}
         </div>
@@ -536,7 +658,11 @@ const LandingPage = ({ onAdminClick }) => {
           {visaPathwaysList.map(pathway => (
             <div className="visa-card" key={pathway._id}>
               <div className="visa-card-header">
-                <span className="country-flag">{pathway.countryFlag}</span>
+                <img
+                  className="country-flag-img"
+                  src={getFlagImageUrl(pathway.countryName, pathway.countryFlag, 'w40')}
+                  alt={`${pathway.countryName} flag`}
+                />
                 <h3>{pathway.countryName}</h3>
               </div>
               <div className="visa-types">
@@ -551,7 +677,7 @@ const LandingPage = ({ onAdminClick }) => {
         </div>
 
         <div className="edu-bottom-note">
-          <h3>📘 What You Get in Every Session</h3>
+          <h3 className="heading-with-icon"><BookOpen size={22} /> What You Get in Every Session</h3>
           <p>After your consultation, you'll receive a personalized document covering the exact visa pathway for your chosen country, based on your education level, trade skills, and experience.</p>
           <button onClick={scrollToForm}>Book Your Session Now</button>
         </div>
@@ -594,42 +720,42 @@ const LandingPage = ({ onAdminClick }) => {
 
         <div className="student-benefits">
           <div className="benefit-card">
-            <div className="ben-icon-wrapper">CA</div>
+            <div className="ben-icon-wrapper"><Globe size={22} /></div>
             <div>
               <h4>Canada — Post-Graduation Work Permit (PGWP)</h4>
               <p>Study in a DLI-designated college and get up to 3 years of open work permit after graduation. Pathway to Express Entry PR.</p>
             </div>
           </div>
           <div className="benefit-card">
-            <div className="ben-icon-wrapper">AU</div>
+            <div className="ben-icon-wrapper"><Globe size={22} /></div>
             <div>
               <h4>Australia — Post-Study Work Visa (Subclass 485)</h4>
               <p>2-4 years of work rights after graduation depending on qualification. Trades and nursing on priority skilled lists for permanent residency.</p>
             </div>
           </div>
           <div className="benefit-card">
-            <div className="ben-icon-wrapper">GB</div>
+            <div className="ben-icon-wrapper"><Globe size={22} /></div>
             <div>
               <h4>UK — Graduate Route Visa</h4>
               <p>2-year post-study work visa (3 years for PhD). No sponsorship needed. Can switch to Skilled Worker Visa if you find a sponsor employer.</p>
             </div>
           </div>
           <div className="benefit-card">
-            <div className="ben-icon-wrapper">DE</div>
+            <div className="ben-icon-wrapper"><Globe size={22} /></div>
             <div>
               <h4>Germany — 18-Month Job Seeker Visa After Study</h4>
               <p>Free or very low tuition at public universities. 18 months to find a job after graduation. Strong demand for technical and trade qualifications.</p>
             </div>
           </div>
           <div className="benefit-card">
-            <div className="ben-icon-wrapper">NZ</div>
+            <div className="ben-icon-wrapper"><Globe size={22} /></div>
             <div>
               <h4>New Zealand — Post-Study Work Visa</h4>
               <p>1-3 years of open work rights after study. Trade qualifications (plumbing, electrical) are on the Green List for fast-track residency.</p>
             </div>
           </div>
           <div className="benefit-card">
-            <div className="ben-icon-wrapper">SG</div>
+            <div className="ben-icon-wrapper"><Globe size={22} /></div>
             <div>
               <h4>Singapore — Training Employment Pass</h4>
               <p>Polytechnic and ITE courses lead to work permits. Employers sponsor S Pass or Work Permit for skilled trade graduates.</p>
@@ -638,9 +764,9 @@ const LandingPage = ({ onAdminClick }) => {
         </div>
 
         <div className="student-cta">
-          <h3>💡 Don't Pick a University Before You Know the Work Visa Rules</h3>
+          <h3 className="heading-with-icon"><Lightbulb size={22} /> Don't Pick a University Before You Know the Work Visa Rules</h3>
           <p>Many students spend lakhs on courses overseas only to discover they can't work after graduation. RouteUp helps you choose a course where you can study, work, and potentially settle.</p>
-          <button onClick={scrollToForm}>Get Study Abroad Guidance — Rs.250</button>
+          <button onClick={scrollToForm}>Get Study Abroad Guidance</button>
         </div>
       </section>
 
@@ -671,7 +797,7 @@ const LandingPage = ({ onAdminClick }) => {
           <div className="step-item">
             <div className="step-num-badge">4</div>
             <h3>Attend Session</h3>
-            <p>45-minute 1-on-1 session with our career expert</p>
+            <p>60-minute 1-on-1 session with our career expert</p>
           </div>
         </div>
       </section>
@@ -849,24 +975,24 @@ const LandingPage = ({ onAdminClick }) => {
               <div className="form-row">
                 <div className="form-group">
                   <label htmlFor="education"><GraduationCap size={14} style={{ marginRight: '6px' }} /> Highest Education <span className="required">*</span></label>
-                  <CustomSelect 
+                  <AutocompleteInput 
                     id="education" 
                     value={formData.education} 
                     onChange={handleInputChange} 
                     options={EDUCATION_OPTIONS} 
-                    placeholder="Select your education" 
+                    placeholder="Type or select your education" 
                     required 
                   />
                 </div>
                 
                 <div className="form-group">
                   <label htmlFor="currentStatus"><Briefcase size={14} style={{ marginRight: '6px' }} /> Current Status <span className="required">*</span></label>
-                  <CustomSelect 
+                  <AutocompleteInput 
                     id="currentStatus" 
                     value={formData.currentStatus} 
                     onChange={handleInputChange} 
                     options={STATUS_OPTIONS} 
-                    placeholder="Select current status" 
+                    placeholder="Type or select current status" 
                     required 
                   />
                 </div>
@@ -912,27 +1038,26 @@ const LandingPage = ({ onAdminClick }) => {
               {/* Career details */}
               {selectedServices.career && (
                 <div className="conditional-service-fields">
-                  <h4>🎯 Career Guidance details</h4>
+                  <h4><Target size={18} /> Career Guidance details</h4>
                   <div className="form-row">
                     <div className="form-group">
-                      <label htmlFor="careerIndustry">Select Industry</label>
-                      <CustomSelect 
+                      <label htmlFor="careerIndustry">Industry</label>
+                      <AutocompleteInput 
                         id="careerIndustry" 
                         value={formData.careerIndustry} 
                         onChange={handleInputChange} 
                         options={INDUSTRY_DROPDOWN_OPTIONS} 
-                        placeholder="Choose an industry" 
+                        placeholder="Type or select industry" 
                       />
                     </div>
                     <div className="form-group">
                       <label htmlFor="careerJobTitle">Target Position</label>
-                      <CustomSelect 
+                      <AutocompleteInput 
                         id="careerJobTitle" 
                         value={formData.careerJobTitle} 
                         onChange={handleInputChange} 
-                        options={formData.careerIndustry && JOBS_BY_INDUSTRY[formData.careerIndustry] ? JOBS_BY_INDUSTRY[formData.careerIndustry].map(job => ({ value: job, label: job })) : []} 
-                        placeholder="Choose role" 
-                        disabled={!formData.careerIndustry}
+                        options={getJobTitleOptions(formData.careerIndustry)} 
+                        placeholder="Type or select role" 
                       />
                     </div>
                   </div>
@@ -942,27 +1067,27 @@ const LandingPage = ({ onAdminClick }) => {
               {/* Visa details */}
               {selectedServices.visa && (
                 <div className="conditional-service-fields">
-                  <h4>✈️ Migration & Visa Details</h4>
+                  <h4><Plane size={18} /> Migration & Visa Details</h4>
                   <div className="form-row">
                     <div className="form-group">
                       <label htmlFor="preferredCountry">Preferred Country</label>
-                      <CustomSelect 
+                      <AutocompleteInput 
                         id="preferredCountry" 
                         value={formData.preferredCountry} 
                         onChange={handleInputChange} 
                         options={COUNTRY_OPTIONS} 
-                        placeholder="Select country" 
+                        placeholder="Type or select country" 
                       />
                     </div>
 
                     <div className="form-group">
                       <label htmlFor="passport">Do you have a valid Passport?</label>
-                      <CustomSelect 
+                      <AutocompleteInput 
                         id="passport" 
                         value={formData.passport} 
                         onChange={handleInputChange} 
                         options={PASSPORT_OPTIONS} 
-                        placeholder="Select" 
+                        placeholder="Type or select passport status" 
                       />
                     </div>
                   </div>
@@ -970,12 +1095,12 @@ const LandingPage = ({ onAdminClick }) => {
                   <div className="form-row full">
                     <div className="form-group">
                       <label htmlFor="overseasExp">Any previous overseas experience?</label>
-                      <CustomSelect 
+                      <AutocompleteInput 
                         id="overseasExp" 
                         value={formData.overseasExp} 
                         onChange={handleInputChange} 
                         options={EXP_OPTIONS} 
-                        placeholder="Select" 
+                        placeholder="Type or select experience" 
                       />
                     </div>
                   </div>
@@ -985,16 +1110,16 @@ const LandingPage = ({ onAdminClick }) => {
               {/* Job placement details */}
               {selectedServices.placement && (
                 <div className="conditional-service-fields">
-                  <h4>💼 Job Placement Details</h4>
+                  <h4><Briefcase size={18} /> Job Placement Details</h4>
                   <div className="form-row">
                     <div className="form-group">
                       <label htmlFor="placementIndustry">Preferred Industry</label>
-                      <CustomSelect 
+                      <AutocompleteInput 
                         id="placementIndustry" 
                         value={formData.placementIndustry} 
                         onChange={handleInputChange} 
                         options={INDUSTRY_DROPDOWN_OPTIONS} 
-                        placeholder="Choose an industry" 
+                        placeholder="Type or select industry" 
                       />
                     </div>
                     
@@ -1029,7 +1154,7 @@ const LandingPage = ({ onAdminClick }) => {
               {selectedCount > 0 && (
                 <div className="payment-summary">
                   <div className="payment-row">
-                    <span>Advisory Session (45 min)</span>
+                    <span>Advisory Session (60 min)</span>
                     <span>{selectedCount} service(s) selected</span>
                   </div>
                   <div className="payment-row total">
@@ -1089,12 +1214,24 @@ const LandingPage = ({ onAdminClick }) => {
             </div>
             <h3>Payment Successful!</h3>
             <p>
-              Thank you, <strong>{formData.fullName}</strong>! Your appointment has been booked successfully.
+              Thank you, <strong>{formData.fullName}</strong>! Your payment is complete and your session booking is confirmed.
             </p>
             <p>
-              A confirmation email has been sent to <strong>{formData.email}</strong> with your booking details.
-              Our team will share the meeting link with you shortly.
+              A confirmation email has been sent to <strong>{formData.email}</strong> with your selected session details.
+              Our admin team will connect with you within <strong>24 hours</strong> to schedule your session.
             </p>
+            {servicesList.filter((service) => selectedServices[service.key]).length > 0 && (
+              <div className="success-selected-sessions">
+                <p className="success-selected-title">Selected Session(s):</p>
+                <ul>
+                  {servicesList
+                    .filter((service) => selectedServices[service.key])
+                    .map((service) => (
+                      <li key={service._id}>{service.title}</li>
+                    ))}
+                </ul>
+              </div>
+            )}
             <button type="button" className="success-modal-done-btn" onClick={handleCloseModal}>Done</button>
           </div>
         </div>

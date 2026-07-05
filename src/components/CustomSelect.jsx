@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { ChevronDown } from 'lucide-react';
 import './CustomSelect.css';
 
-const CustomSelect = ({ id, value, onChange, options, placeholder, disabled, required }) => {
+const CustomSelect = ({ id, value, onChange, options, placeholder, disabled, required, className = '' }) => {
   const [isOpen, setIsOpen] = useState(false);
   const selectRef = useRef(null);
 
@@ -19,7 +19,7 @@ const CustomSelect = ({ id, value, onChange, options, placeholder, disabled, req
   const selectedOption = options.find(opt => opt.value === value);
 
   return (
-    <div className={`custom-select-container ${disabled ? 'disabled' : ''}`} ref={selectRef}>
+    <div className={`custom-select-container ${disabled ? 'disabled' : ''} ${className}`.trim()} ref={selectRef}>
       <div 
         className={`custom-select-trigger ${isOpen ? 'open' : ''} ${!value ? 'placeholder' : ''}`}
         onClick={() => !disabled && setIsOpen(!isOpen)}

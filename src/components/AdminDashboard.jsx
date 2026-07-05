@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { API_URL, SOCKET_URL } from '../config';
 import { io } from 'socket.io-client';
 import toast from 'react-hot-toast';
@@ -9,7 +9,47 @@ import {
   Plus, Edit, Trash2, Globe, FileCheck, Eye, Video, UploadCloud,
   Target, Award, Plane, BookOpen, Compass, ChevronLeft, ChevronRight
 } from 'lucide-react';
-import { CountryList } from '../utils/countries';
+import { CountryList, getCountryFlagCode, getFlagImageUrl } from '../utils/countries';
+import CustomSelect from './CustomSelect';
+
+const BOOKING_STATUS_OPTIONS = [
+  { value: 'New', label: 'New' },
+  { value: 'Processing', label: 'Processing' },
+  { value: 'Completed', label: 'Completed' },
+];
+
+const PAYMENT_FILTER_OPTIONS = [
+  { value: '', label: 'All Payments' },
+  { value: 'Paid', label: 'Paid' },
+  { value: 'Pending', label: 'Pending' },
+];
+
+const EDIT_STATUS_OPTIONS = [
+  { value: 'Student', label: 'Student' },
+  { value: 'Unemployed - Looking for work', label: 'Unemployed - Looking for work' },
+  { value: 'Working - Want to switch', label: 'Working - Want to switch' },
+  { value: 'Working - Want overseas job', label: 'Working - Want overseas job' },
+  { value: 'Freelancer / Self-employed', label: 'Freelancer / Self-employed' },
+  { value: 'Employed', label: 'Employed' },
+  { value: 'Unemployed', label: 'Unemployed' },
+  { value: 'Business Owner', label: 'Business Owner' },
+  { value: 'Other', label: 'Other' },
+];
+
+const POPULAR_PATHWAY_COUNTRIES = [
+  { name: 'UAE / Dubai', code: 'ae' },
+  { name: 'Saudi Arabia', code: 'sa' },
+  { name: 'Qatar', code: 'qa' },
+  { name: 'Australia', code: 'au' },
+  { name: 'Canada', code: 'ca' },
+  { name: 'Germany', code: 'de' },
+  { name: 'United Kingdom', code: 'gb' },
+  { name: 'United States', code: 'us' },
+  { name: 'New Zealand', code: 'nz' },
+  { name: 'Singapore', code: 'sg' },
+  { name: 'Norway', code: 'no' },
+  { name: 'India', code: 'in' }
+];
 
 const IconMap = {
   Briefcase,
@@ -81,17 +121,46 @@ const AdminDashboard = ({ onLogout }) => {
   const [pathwayVisaTypes, setPathwayVisaTypes] = useState('');
   const [pathwayDescription, setPathwayDescription] = useState('');
   const [pathwayDocBadgeText, setPathwayDocBadgeText] = useState('');
+  const [pathwayCountrySearch, setPathwayCountrySearch] = useState('');
+  const [isPathwayCountryOpen, setIsPathwayCountryOpen] = useState(false);
+  const pathwayCountryRef = useRef(null);
 
-  // Fetch Bookings
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (pathwayCountryRef.current && !pathwayCountryRef.current.contains(event.target)) {
+        setIsPathwayCountryOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  const getFilteredPathwayCountries = () => {
+    const query = pathwayCountrySearch.trim().toLowerCase();
+    if (!query) return POPULAR_PATHWAY_COUNTRIES;
+
+    const aliasMatches = POPULAR_PATHWAY_COUNTRIES.filter((country) =>
+      country.name.toLowerCase().includes(query)
+    );
+    const listMatches = CountryList.filter((country) =>
+      country.name.toLowerCase().includes(query)
+    ).map((country) => ({ name: country.name, code: country.code }));
+
+    const merged = [...aliasMatches, ...listMatches].filter(
+      (country, index, arr) => arr.findIndex((item) => item.code === country.code && item.name === country.name) === index
+    );
+
+    return merged.slice(0, 15);
+  };
+
   const [isIconDropdownOpen, setIsIconDropdownOpen] = useState(false);
-  const [isFlagDropdownOpen, setIsFlagDropdownOpen] = useState(false);
   const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
   const [scheduleLink, setScheduleLink] = useState('');
   const [scheduleDateTime, setScheduleDateTime] = useState('');
 
   const [isPostMeetingModalOpen, setIsPostMeetingModalOpen] = useState(false);
   const [postMeetingNotes, setPostMeetingNotes] = useState('');
-  const [postMeetingDoc, setPostMeetingDoc] = useState(null);
+  const [postMeetingFiles, setPostMeetingFiles] = useState([]);
 
   const [isEditProfileModalOpen, setIsEditProfileModalOpen] = useState(false);
   const [editProfileData, setEditProfileData] = useState(null);
@@ -189,19 +258,32 @@ const AdminDashboard = ({ onLogout }) => {
   const openPostMeetingModal = (booking) => {
     setSelectedBooking(booking);
     setPostMeetingNotes(booking.postMeetingDetails?.notes || '');
-    setPostMeetingDoc(null);
+    setPostMeetingFiles([]);
     setIsPostMeetingModalOpen(true);
+  };
+
+  const handlePostMeetingFilesChange = (e) => {
+    const selected = Array.from(e.target.files || []);
+    setPostMeetingFiles((prev) => [...prev, ...selected]);
+    e.target.value = '';
+  };
+
+  const removePostMeetingFile = (index) => {
+    setPostMeetingFiles((prev) => prev.filter((_, i) => i !== index));
   };
 
   const handlePostMeetingSubmit = async (e) => {
     e.preventDefault();
+    if (!postMeetingNotes.trim() && postMeetingFiles.length === 0) {
+      toast.error('Please add session notes or upload at least one file.');
+      return;
+    }
+
     setLoading(true);
     const token = localStorage.getItem('adminToken');
     const formData = new FormData();
     formData.append('notes', postMeetingNotes);
-    if (postMeetingDoc) {
-      formData.append('document', postMeetingDoc);
-    }
+    postMeetingFiles.forEach((file) => formData.append('documents', file));
 
     try {
       const res = await fetch(`${API_URL}/api/bookings/${selectedBooking._id}/post-meeting`, {
@@ -517,27 +599,49 @@ const AdminDashboard = ({ onLogout }) => {
   const openPathwayAddModal = () => {
     setEditingPathway(null);
     setPathwayCountryName('');
-    setPathwayCountryFlag('ae');
+    setPathwayCountryFlag('');
+    setPathwayCountrySearch('');
     setPathwayVisaTypes('');
     setPathwayDescription('');
     setPathwayDocBadgeText('Detailed visa document provided');
-    setIsFlagDropdownOpen(false);
+    setIsPathwayCountryOpen(false);
     setIsPathwayModalOpen(true);
   };
 
   const openPathwayEditModal = (pathway) => {
     setEditingPathway(pathway);
     setPathwayCountryName(pathway.countryName);
-    setPathwayCountryFlag(pathway.countryFlag);
+    setPathwayCountryFlag(getCountryFlagCode(pathway.countryName, pathway.countryFlag));
+    setPathwayCountrySearch(pathway.countryName);
     setPathwayVisaTypes(pathway.visaTypes.join(', '));
     setPathwayDescription(pathway.description);
     setPathwayDocBadgeText(pathway.docBadgeText);
-    setIsFlagDropdownOpen(false);
+    setIsPathwayCountryOpen(false);
     setIsPathwayModalOpen(true);
+  };
+
+  const handlePathwayCountryChange = (value) => {
+    setPathwayCountrySearch(value);
+    setPathwayCountryName(value);
+    setPathwayCountryFlag(getCountryFlagCode(value));
+    setIsPathwayCountryOpen(true);
+  };
+
+  const handlePathwayCountrySelect = (country) => {
+    setPathwayCountryName(country.name);
+    setPathwayCountryFlag(country.code);
+    setPathwayCountrySearch(country.name);
+    setIsPathwayCountryOpen(false);
   };
 
   const handleSavePathway = async (e) => {
     e.preventDefault();
+    const resolvedFlag = getCountryFlagCode(pathwayCountryName, pathwayCountryFlag);
+    if (!resolvedFlag) {
+      toast.error('Please select a valid country so the flag can be detected.');
+      return;
+    }
+
     const token = localStorage.getItem('adminToken');
     const url = editingPathway 
       ? `${API_URL}/api/visa-pathways/${editingPathway._id}`
@@ -553,7 +657,7 @@ const AdminDashboard = ({ onLogout }) => {
         },
         body: JSON.stringify({
           countryName: pathwayCountryName,
-          countryFlag: pathwayCountryFlag,
+          countryFlag: getCountryFlagCode(pathwayCountryName, pathwayCountryFlag),
           visaTypes: pathwayVisaTypes,
           description: pathwayDescription,
           docBadgeText: pathwayDocBadgeText
@@ -814,25 +918,38 @@ const AdminDashboard = ({ onLogout }) => {
                 </div>
 
                 <div className="admin-filters">
-                  <select value={serviceFilter} onChange={(e) => setServiceFilter(e.target.value)}>
-                    <option value="">All Services</option>
-                    {servicesList.map(s => (
-                      <option key={s._id} value={s.key}>{s.title}</option>
-                    ))}
-                  </select>
+                  <CustomSelect
+                    id="service-filter"
+                    className="admin-portal-select"
+                    value={serviceFilter}
+                    onChange={(e) => setServiceFilter(e.target.value)}
+                    placeholder="All Services"
+                    options={[
+                      { value: '', label: 'All Services' },
+                      ...servicesList.map((s) => ({ value: s.key, label: s.title })),
+                    ]}
+                  />
 
-                  <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-                    <option value="">All Call Status</option>
-                    <option value="New">New</option>
-                    <option value="Processing">Processing</option>
-                    <option value="Completed">Completed</option>
-                  </select>
+                  <CustomSelect
+                    id="status-filter"
+                    className="admin-portal-select"
+                    value={statusFilter}
+                    onChange={(e) => setStatusFilter(e.target.value)}
+                    placeholder="All Call Status"
+                    options={[
+                      { value: '', label: 'All Call Status' },
+                      ...BOOKING_STATUS_OPTIONS,
+                    ]}
+                  />
 
-                  <select value={paymentFilter} onChange={(e) => setPaymentFilter(e.target.value)}>
-                    <option value="">All Payments</option>
-                    <option value="Paid">Paid</option>
-                    <option value="Pending">Pending</option>
-                  </select>
+                  <CustomSelect
+                    id="payment-filter"
+                    className="admin-portal-select"
+                    value={paymentFilter}
+                    onChange={(e) => setPaymentFilter(e.target.value)}
+                    placeholder="All Payments"
+                    options={PAYMENT_FILTER_OPTIONS}
+                  />
                 </div>
               </section>
 
@@ -905,17 +1022,22 @@ const AdminDashboard = ({ onLogout }) => {
                                 <Edit size={16} />
                               </button>
                               
+                              {booking.status === 'Completed' && (
+                                <button
+                                  className="admin-action-btn followup-upload-btn"
+                                  title="Upload notes & files and email candidate"
+                                  onClick={() => openPostMeetingModal(booking)}
+                                >
+                                  <UploadCloud size={15} />
+                                  <span>Upload</span>
+                                </button>
+                              )}
+
                               {booking.status !== 'Completed' && (
                                 <>
                                   <button className="admin-action-btn icon-only schedule-btn" title="Schedule Meeting" onClick={() => openScheduleModal(booking)} style={{ padding: '6px', background: '#3b82f6', color: '#fff', border: 'none' }}>
                                     <Video size={16} />
                                   </button>
-
-                                  {booking.meetingDetails?.dateTime && new Date(booking.meetingDetails.dateTime) < new Date() && (
-                                    <button className="admin-action-btn icon-only upload-btn" title="Upload Notes & Document" onClick={() => openPostMeetingModal(booking)} style={{ padding: '6px', background: '#8b5cf6', color: '#fff', border: 'none' }}>
-                                      <UploadCloud size={16} />
-                                    </button>
-                                  )}
 
                                   <button className="admin-action-btn icon-only complete-btn" title="Mark as Complete" onClick={() => handleCompleteBooking(booking._id)} style={{ padding: '6px', background: '#10b981', color: '#fff', border: 'none' }}>
                                     <CheckCircle size={16} />
@@ -1120,8 +1242,8 @@ const AdminDashboard = ({ onLogout }) => {
                         <tr key={pathway._id}>
                           <td style={{ fontSize: '20px', textAlign: 'center' }}>
                             <img 
-                              src={`https://flagcdn.com/w40/${pathway.countryFlag ? pathway.countryFlag.toLowerCase() : 'xx'}.png`} 
-                              alt="flag" 
+                              src={getFlagImageUrl(pathway.countryName, pathway.countryFlag, 'w40')} 
+                              alt={`${pathway.countryName} flag`}
                               style={{ width: '28px', borderRadius: '3px', border: '1px solid #e2e8f0' }} 
                               onError={(e) => { e.target.style.display = 'none'; }} 
                             />
@@ -1258,13 +1380,15 @@ const AdminDashboard = ({ onLogout }) => {
                 />
 
                 <div className="counselor-form-actions">
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                    <span style={{ fontSize: '13px', color: '#64748b' }}>Booking Status:</span>
-                    <select value={modalStatus} onChange={(e) => setModalStatus(e.target.value)}>
-                      <option value="New">New</option>
-                      <option value="Processing">Processing</option>
-                      <option value="Completed">Completed</option>
-                    </select>
+                  <div className="counselor-status-row">
+                    <span className="counselor-status-label">Booking Status:</span>
+                    <CustomSelect
+                      id="modal-status"
+                      className="admin-portal-select admin-portal-select-inline"
+                      value={modalStatus}
+                      onChange={(e) => setModalStatus(e.target.value)}
+                      options={BOOKING_STATUS_OPTIONS}
+                    />
                   </div>
 
                   <button type="submit" className="save-counselor-btn">
@@ -1445,157 +1569,118 @@ const AdminDashboard = ({ onLogout }) => {
       {/* CRUD MODAL: VISA PATHWAY (CREATE / EDIT) */}
       {isPathwayModalOpen && (
         <div className="admin-modal-overlay">
-          <div className="admin-modal" style={{ maxWidth: '600px' }}>
+          <div className="admin-modal pathway-form-modal">
             <div className="admin-modal-header">
-              <h3>{editingPathway ? 'Edit Visa Pathway' : 'Add New Visa Pathway'}</h3>
+              <div>
+                <h3>{editingPathway ? 'Edit Visa Pathway' : 'Add New Visa Pathway'}</h3>
+                <p className="pathway-form-subtitle">Select a country and the flag will be detected automatically</p>
+              </div>
               <button className="admin-modal-close" onClick={() => setIsPathwayModalOpen(false)}>✕</button>
             </div>
             
             <form onSubmit={handleSavePathway}>
-              <div className="admin-modal-body">
-                <div className="admin-form-grid" style={{ gap: '20px' }}>
-                  <div className="admin-input-group">
-                    <label style={{ color: '#0f172a', fontWeight: 'bold', fontSize: '13px', display: 'block', marginBottom: '6px' }}>Country Name</label>
-                    <div className="admin-input-wrapper" style={{ display: 'block' }}>
-                      <input 
-                        type="text" 
-                        placeholder="e.g. Germany" 
-                        value={pathwayCountryName} 
-                        onChange={(e) => setPathwayCountryName(e.target.value)}
-                        required
-                        style={{ width: '100%', height: '42px', paddingLeft: '16px', border: '1px solid #cbd5e1', borderRadius: '8px', background: '#f8fafc', color: '#0f172a', outline: 'none' }}
+              <div className="admin-modal-body pathway-form-body">
+                <div className="pathway-form-field" ref={pathwayCountryRef}>
+                  <label htmlFor="pathway-country-search">Country Name</label>
+                  <div className={`pathway-country-input-wrap ${pathwayCountryFlag ? 'has-flag' : ''}`}>
+                    {pathwayCountryFlag && (
+                      <img
+                        className="pathway-country-input-flag"
+                        src={getFlagImageUrl(pathwayCountryName, pathwayCountryFlag, 'w20')}
+                        alt={`${pathwayCountryName} flag`}
                       />
-                    </div>
+                    )}
+                    <input
+                      id="pathway-country-search"
+                      type="text"
+                      placeholder="Search and select country"
+                      value={pathwayCountrySearch}
+                      onChange={(e) => handlePathwayCountryChange(e.target.value)}
+                      onFocus={() => setIsPathwayCountryOpen(true)}
+                      autoComplete="off"
+                      required
+                    />
                   </div>
 
-                  <div className="admin-input-group">
-                    <label style={{ color: '#0f172a', fontWeight: 'bold', fontSize: '13px', display: 'block', marginBottom: '6px' }}>Country Flag</label>
-                    <div className="admin-input-wrapper" style={{ display: 'block', position: 'relative' }}>
-                      <div 
-                        onClick={() => setIsFlagDropdownOpen(!isFlagDropdownOpen)}
-                        style={{
-                          width: '100%', 
-                          height: '42px', 
-                          paddingLeft: '16px', 
-                          border: '1px solid #cbd5e1', 
-                          borderRadius: '8px', 
-                          background: '#f8fafc', 
-                          color: '#0f172a',
-                          display: 'flex',
-                          alignItems: 'center',
-                          justifyContent: 'space-between',
-                          cursor: 'pointer',
-                          userSelect: 'none'
-                        }}
-                      >
-                        {pathwayCountryFlag ? (
-                          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-                            <img src={`https://flagcdn.com/w20/${pathwayCountryFlag.toLowerCase()}.png`} alt="flag" style={{ width: '20px', borderRadius: '2px', border: '1px solid #e2e8f0' }} onError={(e) => e.target.style.display='none'} />
-                            <span style={{ fontWeight: 'bold', fontSize: '14px' }}>{pathwayCountryFlag.toUpperCase()}</span>
-                          </div>
-                        ) : (
-                          <span style={{ color: '#94a3b8' }}>Select flag...</span>
-                        )}
-                        <span style={{ marginRight: '16px', fontSize: '10px' }}>▼</span>
-                      </div>
-                      
-                      {isFlagDropdownOpen && (
-                        <div style={{
-                          position: 'absolute',
-                          top: '100%',
-                          left: 0,
-                          right: 0,
-                          marginTop: '4px',
-                          background: '#ffffff',
-                          border: '1px solid #cbd5e1',
-                          borderRadius: '8px',
-                          boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
-                          maxHeight: '220px',
-                          overflowY: 'auto',
-                          zIndex: 50
-                        }}>
-                          {CountryList.map(country => (
-                            <div 
-                              key={country.code} 
-                              onClick={() => {
-                                setPathwayCountryFlag(country.code);
-                                setIsFlagDropdownOpen(false);
-                              }}
-                              style={{
-                                padding: '10px 16px',
-                                cursor: 'pointer',
-                                transition: 'background-color 0.2s',
-                                display: 'flex',
-                                alignItems: 'center',
-                                gap: '10px'
-                              }}
-                              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#f1f5f9'}
-                              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-                            >
-                              <img src={`https://flagcdn.com/w20/${country.code}.png`} alt={country.name} style={{ width: '24px', borderRadius: '2px', border: '1px solid #e2e8f0' }} />
-                              <span style={{ fontSize: '13px', color: '#0f172a', fontWeight: 'bold' }}>{country.name}</span>
-                              <span style={{ fontSize: '11px', color: '#64748b', marginLeft: 'auto', fontWeight: 'bold' }}>{country.code.toUpperCase()}</span>
-                            </div>
-                          ))}
-                        </div>
+                  {isPathwayCountryOpen && (
+                    <div className="pathway-country-dropdown">
+                      {getFilteredPathwayCountries().length > 0 ? (
+                        getFilteredPathwayCountries().map((country) => (
+                          <button
+                            key={`${country.code}-${country.name}`}
+                            type="button"
+                            className={`pathway-country-option ${pathwayCountryFlag === country.code && pathwayCountryName === country.name ? 'active' : ''}`}
+                            onMouseDown={(e) => e.preventDefault()}
+                            onClick={() => handlePathwayCountrySelect(country)}
+                          >
+                            <img src={getFlagImageUrl(country.name, country.code, 'w20')} alt={country.name} />
+                            <span>{country.name}</span>
+                            <small>{country.code.toUpperCase()}</small>
+                          </button>
+                        ))
+                      ) : (
+                        <div className="pathway-country-empty">No country found</div>
                       )}
                     </div>
+                  )}
+
+                  <div className="pathway-country-quick-list">
+                    {POPULAR_PATHWAY_COUNTRIES.map((country) => (
+                      <button
+                        key={country.code}
+                        type="button"
+                        className={`pathway-country-chip ${pathwayCountryFlag === country.code && pathwayCountryName === country.name ? 'active' : ''}`}
+                        onClick={() => handlePathwayCountrySelect(country)}
+                      >
+                        <img src={getFlagImageUrl(country.name, country.code, 'w20')} alt={country.name} />
+                        <span>{country.name}</span>
+                      </button>
+                    ))}
                   </div>
                 </div>
 
-                <div className="admin-input-group" style={{ marginTop: '20px' }}>
-                  <label style={{ color: '#0f172a', fontWeight: 'bold', fontSize: '13px', display: 'block', marginBottom: '6px' }}>Visa Types (comma separated)</label>
-                  <div className="admin-input-wrapper" style={{ display: 'block' }}>
-                    <input 
-                      type="text" 
-                      placeholder="e.g. Opportunity Card, Work Permit" 
-                      value={pathwayVisaTypes} 
-                      onChange={(e) => setPathwayVisaTypes(e.target.value)}
-                      required
-                      style={{ width: '100%', height: '42px', paddingLeft: '16px', border: '1px solid #cbd5e1', borderRadius: '8px', background: '#f8fafc', color: '#0f172a', outline: 'none' }}
-                    />
-                  </div>
+                <div className="pathway-form-field">
+                  <label htmlFor="pathway-visa-types">Visa Types (comma separated)</label>
+                  <input
+                    id="pathway-visa-types"
+                    type="text"
+                    className="pathway-form-input"
+                    placeholder="e.g. Opportunity Card, Work Permit"
+                    value={pathwayVisaTypes}
+                    onChange={(e) => setPathwayVisaTypes(e.target.value)}
+                    required
+                  />
                 </div>
 
-                <div className="admin-input-group" style={{ marginTop: '20px' }}>
-                  <label style={{ color: '#0f172a', fontWeight: 'bold', fontSize: '13px', display: 'block', marginBottom: '6px' }}>Document Badge / Hint</label>
-                  <div className="admin-input-wrapper" style={{ display: 'block' }}>
-                    <input 
-                      type="text" 
-                      placeholder="e.g. Detailed visa document provided" 
-                      value={pathwayDocBadgeText} 
-                      onChange={(e) => setPathwayDocBadgeText(e.target.value)}
-                      required
-                      style={{ width: '100%', height: '42px', paddingLeft: '16px', border: '1px solid #cbd5e1', borderRadius: '8px', background: '#f8fafc', color: '#0f172a', outline: 'none' }}
-                    />
-                  </div>
+                <div className="pathway-form-field">
+                  <label htmlFor="pathway-doc-badge">Document Badge / Hint</label>
+                  <input
+                    id="pathway-doc-badge"
+                    type="text"
+                    className="pathway-form-input"
+                    placeholder="e.g. Detailed visa document provided"
+                    value={pathwayDocBadgeText}
+                    onChange={(e) => setPathwayDocBadgeText(e.target.value)}
+                    required
+                  />
                 </div>
 
-                <div className="admin-input-group" style={{ marginTop: '20px' }}>
-                  <label style={{ color: '#0f172a', fontWeight: 'bold', fontSize: '13px' }}>Pathway Description</label>
-                  <textarea 
+                <div className="pathway-form-field">
+                  <label htmlFor="pathway-description">Pathway Description</label>
+                  <textarea
+                    id="pathway-description"
+                    className="pathway-form-textarea"
                     placeholder="Describe migration requirements, shortage occupations, language skills..."
                     value={pathwayDescription}
                     onChange={(e) => setPathwayDescription(e.target.value)}
                     required
-                    style={{ 
-                      width: '100%', 
-                      minHeight: '120px', 
-                      background: '#ffffff', 
-                      border: '1px solid #cbd5e1',
-                      borderRadius: '8px',
-                      color: '#0f172a',
-                      padding: '10px 14px',
-                      fontSize: '13px',
-                      fontFamily: 'inherit'
-                    }}
                   />
                 </div>
               </div>
 
-              <div className="admin-modal-header" style={{ borderTop: '1px solid #f1f5f9', borderBottom: 'none', justifyContent: 'flex-end', gap: '10px', padding: '16px 30px' }}>
-                <button type="button" className="admin-action-btn" style={{ background: '#f1f5f9', color: '#0f172a', border: '1px solid #cbd5e1' }} onClick={() => setIsPathwayModalOpen(false)}>Cancel</button>
-                <button type="submit" className="admin-action-btn">Save Pathway</button>
+              <div className="pathway-form-footer">
+                <button type="button" className="pathway-form-cancel-btn" onClick={() => setIsPathwayModalOpen(false)}>Cancel</button>
+                <button type="submit" className="pathway-form-save-btn">Save Pathway</button>
               </div>
             </form>
           </div>
@@ -1650,53 +1735,79 @@ const AdminDashboard = ({ onLogout }) => {
       )}
 
       {/* POST MEETING DOC MODAL */}
-      {isPostMeetingModalOpen && (
+      {isPostMeetingModalOpen && selectedBooking && (
         <div className="admin-modal-overlay">
-          <div className="admin-modal" style={{ maxWidth: '500px' }}>
+          <div className="admin-modal followup-modal">
             <div className="admin-modal-header">
-              <h3>Post-Session Follow-Up</h3>
+              <div>
+                <h3>Send Session Follow-Up</h3>
+                <p className="followup-modal-subtitle">
+                  Notes and files will be emailed to {selectedBooking.email}
+                </p>
+              </div>
               <button className="admin-modal-close" onClick={() => setIsPostMeetingModalOpen(false)}>✕</button>
             </div>
             
             <form onSubmit={handlePostMeetingSubmit}>
               <div className="admin-modal-body">
-                <div className="admin-input-group">
-                  <label style={{ color: '#0f172a', fontWeight: 'bold', fontSize: '13px' }}>Session Notes Summary</label>
+                <div className="followup-section">
+                  <label className="followup-label">
+                    <FileText size={16} />
+                    Session Notes
+                  </label>
                   <textarea 
-                    placeholder="Enter summary to send to candidate..."
+                    className="followup-textarea"
+                    placeholder="Write the session summary, recommendations, and next steps for the candidate..."
                     value={postMeetingNotes}
                     onChange={(e) => setPostMeetingNotes(e.target.value)}
-                    required
-                    style={{ 
-                      width: '100%', 
-                      minHeight: '100px', 
-                      background: '#ffffff', 
-                      border: '1px solid #cbd5e1',
-                      borderRadius: '8px',
-                      color: '#0f172a',
-                      padding: '10px 14px',
-                      fontSize: '13px',
-                      fontFamily: 'inherit'
-                    }}
                   />
                 </div>
 
-                <div className="admin-input-group" style={{ marginTop: '20px' }}>
-                  <label style={{ color: '#0f172a', fontWeight: 'bold', fontSize: '13px' }}>Upload Document (Optional)</label>
-                  <div className="admin-input-wrapper" style={{ display: 'block', padding: '10px 0' }}>
+                <div className="followup-section">
+                  <label className="followup-label">
+                    <UploadCloud size={16} />
+                    Upload Files
+                  </label>
+                  <label className="followup-upload-zone">
+                    <UploadCloud size={28} />
+                    <span className="followup-upload-title">Click to upload multiple files</span>
+                    <span className="followup-upload-hint">PDF, DOC, DOCX — up to 10 files, 5MB each</span>
                     <input 
-                      type="file" 
-                      onChange={(e) => setPostMeetingDoc(e.target.files[0])}
+                      type="file"
+                      multiple
+                      onChange={handlePostMeetingFilesChange}
                       accept=".pdf,.doc,.docx"
-                      style={{ color: '#0f172a', width: '100%' }}
                     />
-                  </div>
+                  </label>
+
+                  {postMeetingFiles.length > 0 && (
+                    <div className="followup-file-list">
+                      {postMeetingFiles.map((file, index) => (
+                        <div className="followup-file-item" key={`${file.name}-${index}`}>
+                          <div className="followup-file-info">
+                            <FileText size={16} />
+                            <span>{file.name}</span>
+                            <small>{(file.size / 1024 / 1024).toFixed(2)} MB</small>
+                          </div>
+                          <button
+                            type="button"
+                            className="followup-file-remove"
+                            onClick={() => removePostMeetingFile(index)}
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
 
-              <div className="admin-modal-header" style={{ borderTop: '1px solid #f1f5f9', borderBottom: 'none', justifyContent: 'flex-end', gap: '10px', padding: '16px 30px' }}>
-                <button type="button" className="admin-action-btn" style={{ background: '#f1f5f9', color: '#0f172a', border: '1px solid #cbd5e1' }} onClick={() => setIsPostMeetingModalOpen(false)}>Cancel</button>
-                <button type="submit" className="admin-action-btn" disabled={loading}>{loading ? 'Sending...' : 'Send Notes & Doc'}</button>
+              <div className="followup-modal-footer">
+                <button type="button" className="followup-cancel-btn" onClick={() => setIsPostMeetingModalOpen(false)}>Cancel</button>
+                <button type="submit" className="followup-send-btn" disabled={loading}>
+                  {loading ? 'Sending...' : 'Send to Candidate'}
+                </button>
               </div>
             </form>
           </div>
@@ -1705,54 +1816,104 @@ const AdminDashboard = ({ onLogout }) => {
       {/* EDIT PROFILE MODAL */}
       {isEditProfileModalOpen && editProfileData && (
         <div className="admin-modal-overlay">
-          <div className="admin-modal">
+          <div className="admin-modal edit-profile-modal">
             <div className="admin-modal-header">
-              <h3>Edit Candidate Profile</h3>
+              <div>
+                <h3>Edit Candidate Profile</h3>
+                <p className="edit-profile-subtitle">Update candidate contact and background details</p>
+              </div>
               <button className="admin-modal-close" onClick={() => setIsEditProfileModalOpen(false)}>✕</button>
             </div>
             <form onSubmit={handleEditProfileSubmit}>
-              <div className="admin-modal-body">
-                <div className="admin-input-group">
-                  <label>Full Name</label>
-                  <input type="text" value={editProfileData.name} onChange={(e) => setEditProfileData({...editProfileData, name: e.target.value})} required style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1' }} />
-                </div>
-                <div className="admin-input-group" style={{ marginTop: '12px' }}>
-                  <label>WhatsApp / Phone</label>
-                  <input type="text" value={editProfileData.phone} onChange={(e) => setEditProfileData({...editProfileData, phone: e.target.value})} required style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1' }} />
-                </div>
-                <div className="admin-input-group" style={{ marginTop: '12px' }}>
-                  <label>Email</label>
-                  <input type="email" value={editProfileData.email} onChange={(e) => setEditProfileData({...editProfileData, email: e.target.value})} required style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1' }} />
-                </div>
-                <div className="admin-input-group" style={{ marginTop: '12px' }}>
-                  <label>Age</label>
-                  <input type="number" value={editProfileData.age} onChange={(e) => setEditProfileData({...editProfileData, age: e.target.value})} required style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1' }} />
-                </div>
-                <div className="admin-input-group" style={{ marginTop: '12px' }}>
-                  <label>Location / Address</label>
-                  <input type="text" value={editProfileData.address} onChange={(e) => setEditProfileData({...editProfileData, address: e.target.value})} required style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1' }} />
-                </div>
-                <div className="admin-input-group" style={{ marginTop: '12px' }}>
-                  <label>Education</label>
-                  <input type="text" value={editProfileData.education} onChange={(e) => setEditProfileData({...editProfileData, education: e.target.value})} required style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1' }} />
-                </div>
-                <div className="admin-input-group" style={{ marginTop: '12px' }}>
-                  <label>Current Status</label>
-                  <select value={editProfileData.currentStatus} onChange={(e) => setEditProfileData({...editProfileData, currentStatus: e.target.value})} style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1' }}>
-                    <option value="Employed">Employed</option>
-                    <option value="Unemployed">Unemployed</option>
-                    <option value="Student">Student</option>
-                    <option value="Business Owner">Business Owner</option>
-                  </select>
-                </div>
-                <div className="admin-input-group" style={{ marginTop: '12px' }}>
-                  <label>Skills / Trade</label>
-                  <input type="text" value={editProfileData.skills} onChange={(e) => setEditProfileData({...editProfileData, skills: e.target.value})} style={{ width: '100%', padding: '10px', borderRadius: '6px', border: '1px solid #cbd5e1' }} />
+              <div className="admin-modal-body edit-profile-body">
+                <div className="edit-profile-grid">
+                  <div className="edit-profile-field">
+                    <label htmlFor="edit-name">Full Name</label>
+                    <input
+                      id="edit-name"
+                      type="text"
+                      value={editProfileData.name}
+                      onChange={(e) => setEditProfileData({ ...editProfileData, name: e.target.value })}
+                      required
+                    />
+                  </div>
+                  <div className="edit-profile-field">
+                    <label htmlFor="edit-phone">WhatsApp / Phone</label>
+                    <input
+                      id="edit-phone"
+                      type="text"
+                      value={editProfileData.phone}
+                      onChange={(e) => setEditProfileData({ ...editProfileData, phone: e.target.value })}
+                      required
+                    />
+                  </div>
+                  <div className="edit-profile-field">
+                    <label htmlFor="edit-email">Email</label>
+                    <input
+                      id="edit-email"
+                      type="email"
+                      value={editProfileData.email}
+                      onChange={(e) => setEditProfileData({ ...editProfileData, email: e.target.value })}
+                      required
+                    />
+                  </div>
+                  <div className="edit-profile-field">
+                    <label htmlFor="edit-age">Age</label>
+                    <input
+                      id="edit-age"
+                      type="number"
+                      value={editProfileData.age}
+                      onChange={(e) => setEditProfileData({ ...editProfileData, age: e.target.value })}
+                      required
+                    />
+                  </div>
+                  <div className="edit-profile-field edit-profile-field-full">
+                    <label htmlFor="edit-address">Location / Address</label>
+                    <input
+                      id="edit-address"
+                      type="text"
+                      value={editProfileData.address}
+                      onChange={(e) => setEditProfileData({ ...editProfileData, address: e.target.value })}
+                      required
+                    />
+                  </div>
+                  <div className="edit-profile-field">
+                    <label htmlFor="edit-education">Education</label>
+                    <input
+                      id="edit-education"
+                      type="text"
+                      value={editProfileData.education}
+                      onChange={(e) => setEditProfileData({ ...editProfileData, education: e.target.value })}
+                      required
+                    />
+                  </div>
+                  <div className="edit-profile-field">
+                    <label htmlFor="edit-status">Current Status</label>
+                    <CustomSelect
+                      id="edit-status"
+                      className="admin-portal-select admin-portal-select-full"
+                      value={editProfileData.currentStatus}
+                      onChange={(e) => setEditProfileData({ ...editProfileData, currentStatus: e.target.value })}
+                      options={EDIT_STATUS_OPTIONS}
+                    />
+                  </div>
+                  <div className="edit-profile-field edit-profile-field-full">
+                    <label htmlFor="edit-skills">Skills / Trade</label>
+                    <input
+                      id="edit-skills"
+                      type="text"
+                      value={editProfileData.skills}
+                      onChange={(e) => setEditProfileData({ ...editProfileData, skills: e.target.value })}
+                      placeholder="e.g. Welding, Electrician, Plumbing..."
+                    />
+                  </div>
                 </div>
               </div>
-              <div className="admin-modal-footer">
-                <button type="button" className="admin-action-btn" style={{ background: '#f1f5f9', color: '#0f172a', border: '1px solid #cbd5e1' }} onClick={() => setIsEditProfileModalOpen(false)}>Cancel</button>
-                <button type="submit" className="admin-action-btn" style={{ background: '#0d7c3d', color: '#fff', border: 'none' }}>Save Changes</button>
+              <div className="edit-profile-footer">
+                <button type="button" className="edit-profile-cancel-btn" onClick={() => setIsEditProfileModalOpen(false)}>Cancel</button>
+                <button type="submit" className="edit-profile-save-btn" disabled={loading}>
+                  {loading ? 'Saving...' : 'Save Changes'}
+                </button>
               </div>
             </form>
           </div>
