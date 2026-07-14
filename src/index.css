@@ -3683,6 +3683,7 @@ h1, h2, h3, h4, h5, h6 {
 .pr-lead-doc-item {
   display: flex;
   justify-content: space-between;
+  align-items: center;
   gap: 12px;
   padding: 10px 12px;
   background: #f8fafc;
@@ -3692,11 +3693,51 @@ h1, h2, h3, h4, h5, h6 {
   color: #334155;
 }
 
-.pr-lead-doc-item a {
-  color: #0d7c3d;
+.pr-lead-doc-item > span {
+  flex: 1;
+  min-width: 0;
+  line-height: 1.4;
+}
+
+.pr-lead-doc-actions {
+  display: flex;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.pr-doc-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 12px;
+  border-radius: 7px;
+  font-size: 12px;
   font-weight: 700;
-  white-space: nowrap;
   text-decoration: none;
+  white-space: nowrap;
+  border: none;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.15s, transform 0.15s;
+}
+
+.pr-doc-btn.view {
+  background: #0d7c3d;
+  color: #ffffff;
+}
+
+.pr-doc-btn.view:hover {
+  background: #0a6331;
+}
+
+.pr-doc-btn.download {
+  background: #eff6ff;
+  color: #1d4ed8;
+  border: 1px solid #bfdbfe;
+}
+
+.pr-doc-btn.download:hover {
+  background: #dbeafe;
 }
 
 .pr-lead-doc-item small {

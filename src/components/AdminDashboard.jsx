@@ -101,7 +101,6 @@ const AdminDashboard = ({ onLogout }) => {
   const [prLeadNotes, setPrLeadNotes] = useState('');
   const [prLeadsLoading, setPrLeadsLoading] = useState(false);
   const [prEditData, setPrEditData] = useState(null);
-  const [prMailSubject, setPrMailSubject] = useState('');
   const [prMailMessage, setPrMailMessage] = useState('');
   const [prMailFiles, setPrMailFiles] = useState([]);
   const [prMailSending, setPrMailSending] = useState(false);
@@ -450,11 +449,28 @@ const AdminDashboard = ({ onLogout }) => {
       status: lead.status || 'New',
       adminNotes: lead.adminNotes || '',
     });
-    setPrMailSubject(`Update on your Australia PR enquiry — ${lead.occupation || 'RouteUp'}`);
-    setPrMailMessage(
-      `Hi ${lead.name},\n\nThank you for sharing your Australia PR details with RouteUp.\n\nRegarding your nominated occupation (${lead.occupation}${lead.anzsco ? `, ANZSCO ${lead.anzsco}` : ''}), here is an update from our team:\n\n[Write your guidance here]\n\nBest regards,\nRouteUp Team`
-    );
+    setPrMailMessage(lead.adminNotes || '');
     setPrMailFiles([]);
+  };
+
+  const handlePrDocDownload = async (doc) => {
+    if (!doc?.filePath) return;
+    try {
+      const response = await fetch(`${API_URL}${doc.filePath}`);
+      if (!response.ok) throw new Error('Download failed');
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = doc.fileName || doc.title || 'document';
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch {
+      toast.error('Could not download file');
+      window.open(`${API_URL}${doc.filePath}`, '_blank', 'noopener,noreferrer');
+    }
   };
 
   const closePrLeadModal = () => {
@@ -504,8 +520,8 @@ const AdminDashboard = ({ onLogout }) => {
   const handleSendPrMail = async (e) => {
     e.preventDefault();
     if (!selectedPrLead) return;
-    if (!prMailSubject.trim() || !prMailMessage.trim()) {
-      toast.error('Subject and message are required');
+    if (!prMailMessage.trim() && prMailFiles.length === 0) {
+      toast.error('Please add notes or upload at least one file.');
       return;
     }
 
@@ -513,9 +529,8 @@ const AdminDashboard = ({ onLogout }) => {
     setPrMailSending(true);
     try {
       const formData = new FormData();
-      formData.append('subject', prMailSubject.trim());
-      formData.append('message', prMailMessage.trim());
-      prMailFiles.forEach((file) => formData.append('attachments', file));
+      formData.append('notes', prMailMessage);
+      prMailFiles.forEach((file) => formData.append('documents', file));
 
       const response = await fetch(`${API_URL}/api/pr-leads/${selectedPrLead._id}/send-email`, {
         method: 'POST',
@@ -529,15 +544,15 @@ const AdminDashboard = ({ onLogout }) => {
           setPrLeads((prev) => prev.map((l) => (l._id === data.lead._id ? data.lead : l)));
           setSelectedPrLead(data.lead);
         }
-        toast.success('Email sent in professional format');
+        toast.success('Notes uploaded and email sent!');
         closePrLeadModal();
       } else if (response.status === 401) {
         handleUnauthorized();
       } else {
-        toast.error(data.message || 'Failed to send email');
+        toast.error('Failed: ' + (data.message || 'Could not send email'));
       }
     } catch {
-      toast.error('Error sending email');
+      toast.error('Error uploading follow-up details');
     } finally {
       setPrMailSending(false);
     }
@@ -1712,11 +1727,25 @@ const AdminDashboard = ({ onLogout }) => {
                       <div className="pr-lead-doc-item" key={`${doc.title}-${idx}`}>
                         <span>{doc.title}</span>
                         {doc.filePath ? (
-                          <a href={`${API_URL}${doc.filePath}`} target="_blank" rel="noopener noreferrer">
-                            {doc.fileName || 'Download'}
-                          </a>
+                          <div className="pr-lead-doc-actions">
+                            <a
+                              className="pr-doc-btn view"
+                              href={`${API_URL}${doc.filePath}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                            >
+                              <Eye size={13} /> View
+                            </a>
+                            <button
+                              type="button"
+                              className="pr-doc-btn download"
+                              onClick={() => handlePrDocDownload(doc)}
+                            >
+                              <Download size={13} /> Download
+                            </button>
+                          </div>
                         ) : (
-                          <small>{doc.fileName || 'Marked only'}</small>
+                          <small>No file</small>
                         )}
                       </div>
                     ))}
@@ -1882,9 +1911,9 @@ const AdminDashboard = ({ onLogout }) => {
           <div className="admin-modal followup-modal">
             <div className="admin-modal-header">
               <div>
-                <h3>Send Email</h3>
+                <h3>Send Australia PR Follow-Up</h3>
                 <p className="followup-modal-subtitle">
-                  Write freely here — on submit the email is sent in a professional RouteUp format to {selectedPrLead.email}
+                  Notes and files will be emailed to {selectedPrLead.email}
                 </p>
               </div>
               <button className="admin-modal-close" onClick={closePrLeadModal}>✕</button>
@@ -1892,53 +1921,47 @@ const AdminDashboard = ({ onLogout }) => {
             <form onSubmit={handleSendPrMail}>
               <div className="admin-modal-body">
                 <div className="followup-section">
-                  <label className="followup-label">To</label>
-                  <input className="pr-mail-readonly" value={selectedPrLead.email} readOnly />
-                </div>
-                <div className="followup-section">
-                  <label className="followup-label">Subject *</label>
-                  <input
-                    className="pr-mail-input"
-                    value={prMailSubject}
-                    onChange={(e) => setPrMailSubject(e.target.value)}
-                    placeholder="Email subject"
-                    required
-                  />
-                </div>
-                <div className="followup-section">
-                  <label className="followup-label">Message *</label>
+                  <label className="followup-label">
+                    <FileText size={16} />
+                    Follow-Up Notes
+                  </label>
                   <textarea
                     className="followup-textarea"
+                    placeholder="Write the PR guidance, document checklist notes, and next steps for the candidate..."
                     value={prMailMessage}
                     onChange={(e) => setPrMailMessage(e.target.value)}
-                    placeholder="Write your message in any format..."
-                    rows={8}
-                    required
                   />
                 </div>
+
                 <div className="followup-section">
-                  <label className="followup-label">Attachments (optional)</label>
+                  <label className="followup-label">
+                    <UploadCloud size={16} />
+                    Upload Files
+                  </label>
                   <label className="followup-upload-zone">
+                    <UploadCloud size={28} />
+                    <span className="followup-upload-title">Click to upload multiple files</span>
+                    <span className="followup-upload-hint">PDF, DOC, DOCX — up to 10 files</span>
                     <input
                       type="file"
                       multiple
+                      accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
                       onChange={(e) => {
                         const selected = Array.from(e.target.files || []);
                         setPrMailFiles((prev) => [...prev, ...selected].slice(0, 10));
                         e.target.value = '';
                       }}
                     />
-                    <UploadCloud size={22} />
-                    <div className="followup-upload-title">Add files to attach</div>
-                    <div className="followup-upload-hint">PDF, DOC, images, ZIP — up to 10 files</div>
                   </label>
+
                   {prMailFiles.length > 0 && (
                     <div className="followup-file-list">
                       {prMailFiles.map((file, index) => (
                         <div className="followup-file-item" key={`${file.name}-${index}`}>
                           <div className="followup-file-info">
+                            <FileText size={16} />
                             <span>{file.name}</span>
-                            <small>{(file.size / 1024).toFixed(1)} KB</small>
+                            <small>{(file.size / 1024 / 1024).toFixed(2)} MB</small>
                           </div>
                           <button
                             type="button"
@@ -1956,8 +1979,7 @@ const AdminDashboard = ({ onLogout }) => {
               <div className="followup-modal-footer">
                 <button type="button" className="followup-cancel-btn" onClick={closePrLeadModal}>Cancel</button>
                 <button type="submit" className="followup-send-btn" disabled={prMailSending}>
-                  <Send size={16} />
-                  {prMailSending ? 'Sending...' : 'Send Professional Email'}
+                  {prMailSending ? 'Sending...' : 'Send to Candidate'}
                 </button>
               </div>
             </form>
