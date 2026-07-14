@@ -3527,6 +3527,25 @@ h1, h2, h3, h4, h5, h6 {
   color: #999;
 }
 
+.pr-payment-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  margin-bottom: 14px;
+  background: #f0faf4;
+  border: 1px solid #bbf7d0;
+  border-radius: 10px;
+  font-size: 14px;
+  color: #334155;
+}
+
+.pr-payment-summary strong {
+  color: #0d7c3d;
+  font-size: 18px;
+  font-weight: 800;
+}
+
 .pr-back-link {
   text-align: center;
   margin-top: 14px;

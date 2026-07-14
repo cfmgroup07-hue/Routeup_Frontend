@@ -368,7 +368,7 @@ const ApplyAustraliaPR = () => {
                   onClick={handleLeadSubmit}
                   disabled={submitting}
                 >
-                  {submitting ? 'Saving...' : 'Book a Visa & Migration session — Rs.2999'}
+                  {submitting ? 'Saving...' : 'Book a Visa & Migration session'}
                 </button>
                 <p className="pr-secure-note">
                   After you submit, our team will connect with you within 24 hours.

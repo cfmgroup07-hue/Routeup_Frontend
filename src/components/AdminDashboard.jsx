@@ -1516,6 +1516,7 @@ const AdminDashboard = ({ onLogout }) => {
                         <th>Contact</th>
                         <th>Occupation</th>
                         <th>Source</th>
+                        <th>Payment</th>
                         <th>Docs</th>
                         <th>Status</th>
                         <th style={{ width: 200 }}>Actions</th>
@@ -1572,6 +1573,16 @@ const AdminDashboard = ({ onLogout }) => {
                             >
                               {lead.source === 'document-upload' ? 'Doc Upload' : 'Eligibility'}
                             </span>
+                          </td>
+                          <td>
+                            <span className={`badge pay-${(lead.paymentStatus || 'Pending').toLowerCase()}`}>
+                              {lead.paymentStatus || 'Pending'}
+                            </span>
+                            {lead.amount > 0 && (
+                              <div style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>
+                                Rs.{lead.amount}
+                              </div>
+                            )}
                           </td>
                           <td style={{ fontWeight: 700, color: '#0f172a' }}>
                             {(lead.uploadedDocuments || []).length}
@@ -1687,6 +1698,19 @@ const AdminDashboard = ({ onLogout }) => {
                       {selectedPrLead.source === 'document-upload' ? 'Document Upload' : 'Eligibility Check'}
                     </span>
                   </div>
+                  <div className="detail-item">
+                    <span className="detail-label">Payment:</span>
+                    <span className="detail-val">
+                      {selectedPrLead.paymentStatus || 'Pending'}
+                      {selectedPrLead.amount > 0 ? ` — Rs.${selectedPrLead.amount}` : ''}
+                    </span>
+                  </div>
+                  {selectedPrLead.paymentId && (
+                    <div className="detail-item">
+                      <span className="detail-label">Payment ID:</span>
+                      <span className="detail-val" style={{ fontSize: 12 }}>{selectedPrLead.paymentId}</span>
+                    </div>
+                  )}
                   {selectedPrLead.origin && (
                     <div className="detail-item">
                       <span className="detail-label">Applying from:</span>
