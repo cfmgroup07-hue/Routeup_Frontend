@@ -3351,6 +3351,35 @@ h1, h2, h3, h4, h5, h6 {
   font-weight: 600;
 }
 
+.pr-progress-missing {
+  color: #b45309;
+  font-weight: 700;
+}
+
+.pr-upload-required-note {
+  margin: 0 0 14px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: #b45309;
+  background: #fffbeb;
+  border: 1px solid #fcd34d;
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.pr-check-row.pr-check-required-missing {
+  background: #fffbeb;
+  margin: 0 -12px;
+  padding-left: 12px;
+  padding-right: 12px;
+  border-radius: 8px;
+}
+
+.pr-check-row.pr-check-required-missing .pr-check-pending {
+  color: #b45309;
+  font-weight: 700;
+}
+
 .pr-check-row {
   display: flex;
   align-items: flex-start;

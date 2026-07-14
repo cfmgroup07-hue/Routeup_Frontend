@@ -35,7 +35,7 @@ const ApplyAustraliaPR = () => {
     return [...UNIVERSAL_DOCS, ...occupation.docs];
   }, [occupation]);
 
-  const uploadedCount = Object.keys(uploaded).length;
+  const uploadedCount = allDocs.filter((doc) => uploaded[doc]?.file).length;
   const totalCount = allDocs.length;
   const progressPct = totalCount ? Math.round((uploadedCount / totalCount) * 100) : 0;
 
@@ -54,19 +54,29 @@ const ApplyAustraliaPR = () => {
   const MAX_FILE_BYTES = 10 * 1024 * 1024; // 10MB per file
   const MAX_TOTAL_BYTES = 20 * 1024 * 1024; // 20MB total request
 
+  const missingDocs = useMemo(
+    () => allDocs.filter((doc) => !uploaded[doc]?.file),
+    [allDocs, uploaded]
+  );
+  const allDocsUploaded = occupation && allDocs.length > 0 && missingDocs.length === 0;
+
   const handleAddDocument = () => {
     if (!occupation || !docTitle) return;
-    if (selectedFile && selectedFile.size > MAX_FILE_BYTES) {
+    if (!selectedFile) {
+      toast.error('Please choose a file for this document — all documents are required.');
+      return;
+    }
+    if (selectedFile.size > MAX_FILE_BYTES) {
       toast.error('Each file must be under 10MB. Please compress or use a smaller file.');
       return;
     }
-    const name = selectedFile?.name || fileName || 'file attached';
     setUploaded((prev) => ({
       ...prev,
-      [docTitle]: { fileName: name, file: selectedFile || null },
+      [docTitle]: { fileName: selectedFile.name, file: selectedFile },
     }));
     setSelectedFile(null);
     setFileName('');
+    toast.success(`${docTitle} added`);
   };
 
   const handleLeadSubmit = async () => {
@@ -76,6 +86,12 @@ const ApplyAustraliaPR = () => {
     }
     if (!occupation) {
       toast.error('Please select your occupation first.');
+      return;
+    }
+    if (!allDocsUploaded) {
+      toast.error(
+        `All documents are required for interview consideration. Missing: ${missingDocs.slice(0, 3).join(', ')}${missingDocs.length > 3 ? ` +${missingDocs.length - 3} more` : ''}`
+      );
       return;
     }
 
@@ -244,21 +260,30 @@ const ApplyAustraliaPR = () => {
           {occupation && (
             <>
               <div className="pr-card">
-                <p className="pr-label">Upload a document</p>
+                <p className="pr-label">
+                  Upload a document <span className="req">*</span>
+                </p>
+                <p className="pr-upload-required-note">
+                  Every document listed below is required. Incomplete uploads will not be considered for an interview.
+                </p>
                 <div className="pr-upload-row">
                   <select
                     className="pr-select"
                     value={docTitle}
                     onChange={(e) => setDocTitle(e.target.value)}
                   >
-                    <optgroup label="Standard documents">
+                    <optgroup label="Standard documents (all required)">
                       {UNIVERSAL_DOCS.map((d) => (
-                        <option key={d} value={d}>{d}</option>
+                        <option key={d} value={d}>
+                          {uploaded[d]?.file ? `✓ ${d}` : `${d} *`}
+                        </option>
                       ))}
                     </optgroup>
-                    <optgroup label={`${occupation.body} checklist`}>
+                    <optgroup label={`${occupation.body} checklist (all required)`}>
                       {occupation.docs.map((d) => (
-                        <option key={d} value={d}>{d}</option>
+                        <option key={d} value={d}>
+                          {uploaded[d]?.file ? `✓ ${d}` : `${d} *`}
+                        </option>
                       ))}
                     </optgroup>
                   </select>
@@ -271,7 +296,7 @@ const ApplyAustraliaPR = () => {
                         setFileName(file?.name || '');
                       }}
                     />
-                    {fileName || 'Choose file'}
+                    {fileName || 'Choose file *'}
                   </label>
                   <button type="button" className="pr-add-btn" onClick={handleAddDocument}>
                     <Upload size={16} />
@@ -286,20 +311,23 @@ const ApplyAustraliaPR = () => {
                 </div>
                 <span className="pr-progress-text">
                   {uploadedCount} of {totalCount} uploaded
+                  {!allDocsUploaded && (
+                    <span className="pr-progress-missing"> — {missingDocs.length} required remaining</span>
+                  )}
                 </span>
               </div>
 
               <div className="pr-card">
-                <p className="pr-label">Standard documents (all applicants)</p>
+                <p className="pr-label">Standard documents (all applicants) — all required *</p>
                 {UNIVERSAL_DOCS.map((doc) => (
-                  <div className="pr-check-row" key={doc}>
-                    <span>{doc}</span>
-                    {uploaded[doc] ? (
+                  <div className={`pr-check-row ${uploaded[doc]?.file ? '' : 'pr-check-required-missing'}`} key={doc}>
+                    <span>{doc} <span className="req">*</span></span>
+                    {uploaded[doc]?.file ? (
                       <span className="pr-check-ok">
                         <Check size={14} /> {uploaded[doc].fileName}
                       </span>
                     ) : (
-                      <span className="pr-check-pending">Not uploaded</span>
+                      <span className="pr-check-pending">Required — not uploaded</span>
                     )}
                   </div>
                 ))}
@@ -307,17 +335,17 @@ const ApplyAustraliaPR = () => {
 
               <div className="pr-card">
                 <p className="pr-label">
-                  {occupation.body} checklist — {occupation.name}
+                  {occupation.body} checklist — {occupation.name} — all required *
                 </p>
                 {occupation.docs.map((doc) => (
-                  <div className="pr-check-row" key={doc}>
-                    <span>{doc}</span>
-                    {uploaded[doc] ? (
+                  <div className={`pr-check-row ${uploaded[doc]?.file ? '' : 'pr-check-required-missing'}`} key={doc}>
+                    <span>{doc} <span className="req">*</span></span>
+                    {uploaded[doc]?.file ? (
                       <span className="pr-check-ok">
                         <Check size={14} /> {uploaded[doc].fileName}
                       </span>
                     ) : (
-                      <span className="pr-check-pending">Not uploaded</span>
+                      <span className="pr-check-pending">Required — not uploaded</span>
                     )}
                   </div>
                 ))}
@@ -366,10 +394,19 @@ const ApplyAustraliaPR = () => {
                   type="button"
                   className="pr-submit-btn"
                   onClick={handleLeadSubmit}
-                  disabled={submitting}
+                  disabled={submitting || !allDocsUploaded}
                 >
-                  {submitting ? 'Saving...' : 'Book a Visa & Migration session'}
+                  {submitting
+                    ? 'Saving...'
+                    : allDocsUploaded
+                      ? 'Book a Visa & Migration session'
+                      : `Upload all ${totalCount} documents to continue`}
                 </button>
+                {!allDocsUploaded && (
+                  <p className="pr-secure-note" style={{ color: '#b45309' }}>
+                    Missing documents mean your application will not be considered for an interview.
+                  </p>
+                )}
                 <p className="pr-secure-note">
                   After you submit, our team will connect with you within 24 hours.
                 </p>
