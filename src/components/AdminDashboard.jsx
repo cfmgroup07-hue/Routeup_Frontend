@@ -7,7 +7,7 @@ import {
   Filter, LogOut, ArrowRight, Download, Calendar, 
   MapPin, GraduationCap, Briefcase, FileText, Bell,
   Plus, Edit, Trash2, Globe, FileCheck, Eye, Video, UploadCloud,
-  Target, Award, Plane, BookOpen, Compass, ChevronLeft, ChevronRight
+  Target, Award, Plane, BookOpen, Compass, ChevronLeft, ChevronRight, Mail, Send
 } from 'lucide-react';
 import { CountryList, getCountryFlagCode, getFlagImageUrl } from '../utils/countries';
 import CustomSelect from './CustomSelect';
@@ -88,9 +88,23 @@ const AdminDashboard = ({ onLogout }) => {
   const [modalStatus, setModalStatus] = useState('');
   const [modalNotes, setModalNotes] = useState('');
 
-  // Active Tab: 'enquiries', 'payments', 'services', 'visa-pathways'
+  // Active Tab: 'enquiries', 'payments', 'services', 'visa-pathways', 'australia-pr'
   const [activeTab, setActiveTab] = useState('enquiries');
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+
+  // Australia PR leads
+  const [prLeads, setPrLeads] = useState([]);
+  const [prSearchTerm, setPrSearchTerm] = useState('');
+  const [selectedPrLead, setSelectedPrLead] = useState(null);
+  const [prModalMode, setPrModalMode] = useState(null); // 'view' | 'edit' | 'mail'
+  const [prLeadStatus, setPrLeadStatus] = useState('New');
+  const [prLeadNotes, setPrLeadNotes] = useState('');
+  const [prLeadsLoading, setPrLeadsLoading] = useState(false);
+  const [prEditData, setPrEditData] = useState(null);
+  const [prMailSubject, setPrMailSubject] = useState('');
+  const [prMailMessage, setPrMailMessage] = useState('');
+  const [prMailFiles, setPrMailFiles] = useState([]);
+  const [prMailSending, setPrMailSending] = useState(false);
 
   // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
@@ -374,6 +388,161 @@ const AdminDashboard = ({ onLogout }) => {
     }
   };
 
+  const fetchPrLeads = async () => {
+    const token = localStorage.getItem('adminToken');
+    if (!token) return;
+    setPrLeadsLoading(true);
+    try {
+      const response = await fetch(`${API_URL}/api/pr-leads`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setPrLeads(data);
+      } else if (response.status === 401) {
+        handleUnauthorized();
+      }
+    } catch (error) {
+      console.error('Failed to fetch PR leads:', error);
+    } finally {
+      setPrLeadsLoading(false);
+    }
+  };
+
+  const handleDeletePrLead = async (id) => {
+    if (!window.confirm('Delete this Australia PR lead?')) return;
+    const token = localStorage.getItem('adminToken');
+    try {
+      const response = await fetch(`${API_URL}/api/pr-leads/${id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (response.ok) {
+        setPrLeads((prev) => prev.filter((l) => l._id !== id));
+        if (selectedPrLead?._id === id) closePrLeadModal();
+        toast.success('PR lead deleted');
+      } else if (response.status === 401) {
+        handleUnauthorized();
+      } else {
+        toast.error('Failed to delete lead');
+      }
+    } catch {
+      toast.error('Error deleting lead');
+    }
+  };
+
+  const openPrLeadModal = (lead, mode = 'view') => {
+    setSelectedPrLead(lead);
+    setPrModalMode(mode);
+    setPrLeadStatus(lead.status || 'New');
+    setPrLeadNotes(lead.adminNotes || '');
+    setPrEditData({
+      name: lead.name || '',
+      phone: lead.phone || '',
+      email: lead.email || '',
+      existingExperience: lead.existingExperience || '',
+      occupation: lead.occupation || '',
+      anzsco: lead.anzsco || '',
+      assessingBody: lead.assessingBody || '',
+      origin: lead.origin || '',
+      country: lead.country || '',
+      state: lead.state || '',
+      status: lead.status || 'New',
+      adminNotes: lead.adminNotes || '',
+    });
+    setPrMailSubject(`Update on your Australia PR enquiry — ${lead.occupation || 'RouteUp'}`);
+    setPrMailMessage(
+      `Hi ${lead.name},\n\nThank you for sharing your Australia PR details with RouteUp.\n\nRegarding your nominated occupation (${lead.occupation}${lead.anzsco ? `, ANZSCO ${lead.anzsco}` : ''}), here is an update from our team:\n\n[Write your guidance here]\n\nBest regards,\nRouteUp Team`
+    );
+    setPrMailFiles([]);
+  };
+
+  const closePrLeadModal = () => {
+    setSelectedPrLead(null);
+    setPrModalMode(null);
+    setPrEditData(null);
+    setPrMailFiles([]);
+    setPrMailSending(false);
+  };
+
+  const handleUpdatePrLead = async (e) => {
+    e.preventDefault();
+    if (!selectedPrLead) return;
+    const token = localStorage.getItem('adminToken');
+    try {
+      const payload =
+        prModalMode === 'edit' && prEditData
+          ? { ...prEditData }
+          : { status: prLeadStatus, adminNotes: prLeadNotes };
+
+      const response = await fetch(`${API_URL}/api/pr-leads/${selectedPrLead._id}`, {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(payload),
+      });
+      if (response.ok) {
+        const updated = await response.json();
+        setPrLeads((prev) => prev.map((l) => (l._id === updated._id ? updated : l)));
+        setSelectedPrLead(updated);
+        setPrLeadStatus(updated.status || 'New');
+        setPrLeadNotes(updated.adminNotes || '');
+        toast.success(prModalMode === 'edit' ? 'Lead details updated' : 'PR lead updated');
+        if (prModalMode === 'edit') setPrModalMode('view');
+      } else if (response.status === 401) {
+        handleUnauthorized();
+      } else {
+        toast.error('Failed to update lead');
+      }
+    } catch {
+      toast.error('Error updating lead');
+    }
+  };
+
+  const handleSendPrMail = async (e) => {
+    e.preventDefault();
+    if (!selectedPrLead) return;
+    if (!prMailSubject.trim() || !prMailMessage.trim()) {
+      toast.error('Subject and message are required');
+      return;
+    }
+
+    const token = localStorage.getItem('adminToken');
+    setPrMailSending(true);
+    try {
+      const formData = new FormData();
+      formData.append('subject', prMailSubject.trim());
+      formData.append('message', prMailMessage.trim());
+      prMailFiles.forEach((file) => formData.append('attachments', file));
+
+      const response = await fetch(`${API_URL}/api/pr-leads/${selectedPrLead._id}/send-email`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+        body: formData,
+      });
+
+      const data = await response.json().catch(() => ({}));
+      if (response.ok) {
+        if (data.lead) {
+          setPrLeads((prev) => prev.map((l) => (l._id === data.lead._id ? data.lead : l)));
+          setSelectedPrLead(data.lead);
+        }
+        toast.success('Email sent in professional format');
+        closePrLeadModal();
+      } else if (response.status === 401) {
+        handleUnauthorized();
+      } else {
+        toast.error(data.message || 'Failed to send email');
+      }
+    } catch {
+      toast.error('Error sending email');
+    } finally {
+      setPrMailSending(false);
+    }
+  };
+
   // Fetch Services List
   const fetchServicesList = async () => {
     try {
@@ -404,6 +573,7 @@ const AdminDashboard = ({ onLogout }) => {
     fetchBookings();
     fetchServicesList();
     fetchVisaPathwaysList();
+    fetchPrLeads();
 
     // Socket.io Connection
     const socket = io(`${SOCKET_URL}`);
@@ -740,6 +910,19 @@ const AdminDashboard = ({ onLogout }) => {
   const currentPathways = visaPathwaysList.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
   const totalPathwaysPages = Math.ceil(visaPathwaysList.length / itemsPerPage);
 
+  const filteredPrLeads = prLeads.filter((lead) => {
+    const q = prSearchTerm.toLowerCase();
+    return (
+      lead.name?.toLowerCase().includes(q) ||
+      lead.email?.toLowerCase().includes(q) ||
+      lead.phone?.includes(prSearchTerm) ||
+      lead.occupation?.toLowerCase().includes(q) ||
+      lead.assessingBody?.toLowerCase().includes(q)
+    );
+  });
+  const currentPrLeads = filteredPrLeads.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+  const totalPrLeadsPages = Math.ceil(filteredPrLeads.length / itemsPerPage);
+
   const renderPagination = (totalPages) => {
     if (totalPages <= 1) return null;
     return (
@@ -811,6 +994,13 @@ const AdminDashboard = ({ onLogout }) => {
             <Globe size={18} style={{ flexShrink: 0 }} />
             <span className="nav-label">Manage Visa Pathways</span>
           </button>
+          <button 
+            className={`admin-sidebar-nav-btn ${activeTab === 'australia-pr' ? 'active' : ''}`}
+            onClick={() => setActiveTab('australia-pr')}
+          >
+            <Plane size={18} style={{ flexShrink: 0 }} />
+            <span className="nav-label">Australia PR Leads</span>
+          </button>
         </nav>
 
         <div className="admin-sidebar-footer">
@@ -833,6 +1023,7 @@ const AdminDashboard = ({ onLogout }) => {
             {activeTab === 'payments' && 'Completed Payments'}
             {activeTab === 'services' && 'Advisory Services Catalog'}
             {activeTab === 'visa-pathways' && 'Visa Pathways & Country Guidance'}
+            {activeTab === 'australia-pr' && 'Australia PR Leads'}
           </h2>
         </header>
 
@@ -1277,8 +1468,502 @@ const AdminDashboard = ({ onLogout }) => {
               </section>
             </>
           )}
+
+          {/* TAB 5: AUSTRALIA PR LEADS */}
+          {activeTab === 'australia-pr' && (
+            <>
+              <section className="admin-controls-card">
+                <div className="admin-search-wrapper">
+                  <Search className="admin-search-icon" size={18} />
+                  <input
+                    type="text"
+                    placeholder="Search by name, email, occupation..."
+                    value={prSearchTerm}
+                    onChange={(e) => setPrSearchTerm(e.target.value)}
+                  />
+                </div>
+                <div style={{ fontSize: 13, color: '#64748b', fontWeight: 600 }}>
+                  {filteredPrLeads.length} lead{filteredPrLeads.length === 1 ? '' : 's'}
+                </div>
+              </section>
+
+              <section className="admin-table-container">
+                {prLeadsLoading ? (
+                  <div className="no-bookings">Loading Australia PR leads...</div>
+                ) : filteredPrLeads.length === 0 ? (
+                  <div className="no-bookings">No Australia PR leads yet</div>
+                ) : (
+                  <table className="admin-table">
+                    <thead>
+                      <tr>
+                        <th>Date</th>
+                        <th>Candidate</th>
+                        <th>Contact</th>
+                        <th>Occupation</th>
+                        <th>Source</th>
+                        <th>Docs</th>
+                        <th>Status</th>
+                        <th style={{ width: 200 }}>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {currentPrLeads.map((lead) => (
+                        <tr key={lead._id}>
+                          <td style={{ whiteSpace: 'nowrap', fontSize: 13 }}>
+                            {new Date(lead.createdAt).toLocaleDateString('en-IN', {
+                              day: 'numeric',
+                              month: 'short',
+                              year: '2-digit',
+                            })}
+                          </td>
+                          <td>
+                            <div style={{ fontWeight: 700, color: '#0f172a' }}>{lead.name}</div>
+                            <div style={{ fontSize: 12, color: '#64748b' }}>
+                              {lead.assessingBody || '—'}
+                            </div>
+                          </td>
+                          <td>
+                            <div style={{ fontSize: 13 }}>{lead.phone}</div>
+                            <button
+                              type="button"
+                              onClick={() => openPrLeadModal(lead, 'mail')}
+                              title="Compose email"
+                              style={{
+                                fontSize: 12,
+                                color: '#0d7c3d',
+                                background: 'none',
+                                border: 'none',
+                                padding: 0,
+                                cursor: 'pointer',
+                                fontWeight: 600,
+                                textDecoration: 'underline',
+                              }}
+                            >
+                              {lead.email}
+                            </button>
+                          </td>
+                          <td style={{ fontSize: 13, maxWidth: 200 }}>
+                            <div style={{ fontWeight: 600 }}>{lead.occupation}</div>
+                            <div style={{ fontSize: 11, color: '#64748b' }}>ANZSCO {lead.anzsco}</div>
+                          </td>
+                          <td>
+                            <span
+                              className="admin-service-pill"
+                              style={{
+                                background: lead.source === 'document-upload' ? '#eff6ff' : '#fef3c7',
+                                color: lead.source === 'document-upload' ? '#1d4ed8' : '#92400e',
+                                borderColor: lead.source === 'document-upload' ? '#bfdbfe' : '#fcd34d',
+                              }}
+                            >
+                              {lead.source === 'document-upload' ? 'Doc Upload' : 'Eligibility'}
+                            </span>
+                          </td>
+                          <td style={{ fontWeight: 700, color: '#0f172a' }}>
+                            {(lead.uploadedDocuments || []).length}
+                          </td>
+                          <td>
+                            <span
+                              className={`badge ${
+                                lead.status === 'New'
+                                  ? 'status-new'
+                                  : lead.status === 'Contacted'
+                                  ? 'status-processing'
+                                  : lead.status === 'Converted'
+                                  ? 'status-completed'
+                                  : 'pay-pending'
+                              }`}
+                            >
+                              {lead.status}
+                            </span>
+                          </td>
+                          <td>
+                            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                              <button
+                                className="admin-action-btn icon-only"
+                                title="View"
+                                onClick={() => openPrLeadModal(lead, 'view')}
+                                style={{ padding: 6, background: '#0d7c3d', color: '#fff', border: 'none' }}
+                              >
+                                <Eye size={14} />
+                              </button>
+                              <button
+                                className="admin-action-btn icon-only"
+                                title="Edit"
+                                onClick={() => openPrLeadModal(lead, 'edit')}
+                                style={{ padding: 6, background: '#f59e0b', color: '#fff', border: 'none' }}
+                              >
+                                <Edit size={14} />
+                              </button>
+                              <button
+                                className="admin-action-btn icon-only"
+                                title="Send Email"
+                                onClick={() => openPrLeadModal(lead, 'mail')}
+                                style={{ padding: 6, background: '#2563eb', color: '#fff', border: 'none' }}
+                              >
+                                <Mail size={14} />
+                              </button>
+                              <button
+                                className="admin-action-btn icon-only delete-btn"
+                                title="Delete"
+                                onClick={() => handleDeletePrLead(lead._id)}
+                                style={{ padding: 6, background: '#ef4444', color: '#fff', border: 'none' }}
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+                {renderPagination(totalPrLeadsPages)}
+              </section>
+            </>
+          )}
         </main>
       </div>
+
+      {/* AUSTRALIA PR LEAD MODALS */}
+      {selectedPrLead && prModalMode === 'view' && (
+        <div className="admin-modal-overlay">
+          <div className="admin-modal pr-lead-view-modal">
+            <div className="admin-modal-header">
+              <div>
+                <h3>Australia PR Lead</h3>
+                <p className="pr-lead-modal-subtitle">Full application details in review format</p>
+              </div>
+              <button className="admin-modal-close" onClick={closePrLeadModal}>✕</button>
+            </div>
+            <div className="admin-modal-body">
+              <div className="pr-lead-view-banner">
+                <div>
+                  <strong>{selectedPrLead.name}</strong>
+                  <span>{selectedPrLead.occupation}</span>
+                </div>
+                <span className={`badge ${
+                  selectedPrLead.status === 'New' ? 'status-new'
+                    : selectedPrLead.status === 'Contacted' ? 'status-processing'
+                    : selectedPrLead.status === 'Converted' ? 'status-completed'
+                    : 'pay-pending'
+                }`}>
+                  {selectedPrLead.status}
+                </span>
+              </div>
+
+              <div className="admin-modal-grid">
+                <div className="admin-modal-section">
+                  <h4><Users size={14} style={{ verticalAlign: 'middle', marginRight: 6 }} /> Candidate</h4>
+                  <div className="detail-item"><span className="detail-label">Name:</span><span className="detail-val">{selectedPrLead.name}</span></div>
+                  <div className="detail-item"><span className="detail-label">Phone:</span><span className="detail-val">{selectedPrLead.phone}</span></div>
+                  <div className="detail-item">
+                    <span className="detail-label">Email:</span>
+                    <button
+                      type="button"
+                      className="detail-val pr-email-link"
+                      onClick={() => setPrModalMode('mail')}
+                    >
+                      {selectedPrLead.email}
+                    </button>
+                  </div>
+                  <div className="detail-item">
+                    <span className="detail-label">Source:</span>
+                    <span className="detail-val">
+                      {selectedPrLead.source === 'document-upload' ? 'Document Upload' : 'Eligibility Check'}
+                    </span>
+                  </div>
+                  {selectedPrLead.origin && (
+                    <div className="detail-item">
+                      <span className="detail-label">Applying from:</span>
+                      <span className="detail-val">
+                        {selectedPrLead.origin === 'offshore'
+                          ? `Offshore — ${selectedPrLead.country || 'N/A'}`
+                          : `Onshore — ${selectedPrLead.state || 'N/A'}`}
+                      </span>
+                    </div>
+                  )}
+                </div>
+                <div className="admin-modal-section">
+                  <h4><Plane size={14} style={{ verticalAlign: 'middle', marginRight: 6 }} /> Occupation</h4>
+                  <div className="detail-item"><span className="detail-label">Occupation:</span><span className="detail-val">{selectedPrLead.occupation}</span></div>
+                  <div className="detail-item"><span className="detail-label">ANZSCO:</span><span className="detail-val">{selectedPrLead.anzsco || '—'}</span></div>
+                  <div className="detail-item"><span className="detail-label">Assessing body:</span><span className="detail-val">{selectedPrLead.assessingBody || '—'}</span></div>
+                  <div className="detail-item">
+                    <span className="detail-label">Submitted:</span>
+                    <span className="detail-val">{new Date(selectedPrLead.createdAt).toLocaleString()}</span>
+                  </div>
+                </div>
+              </div>
+
+              {selectedPrLead.existingExperience && (
+                <div className="admin-modal-section" style={{ marginTop: 16 }}>
+                  <h4>Experience / Training Notes</h4>
+                  <p className="pr-lead-notes-block">{selectedPrLead.existingExperience}</p>
+                </div>
+              )}
+
+              <div className="admin-modal-section" style={{ marginTop: 16 }}>
+                <h4>Uploaded Documents ({(selectedPrLead.uploadedDocuments || []).length})</h4>
+                {(selectedPrLead.uploadedDocuments || []).length === 0 ? (
+                  <p style={{ fontSize: 13, color: '#94a3b8', margin: 0 }}>No documents attached</p>
+                ) : (
+                  <div className="pr-lead-doc-list">
+                    {selectedPrLead.uploadedDocuments.map((doc, idx) => (
+                      <div className="pr-lead-doc-item" key={`${doc.title}-${idx}`}>
+                        <span>{doc.title}</span>
+                        {doc.filePath ? (
+                          <a href={`${API_URL}${doc.filePath}`} target="_blank" rel="noopener noreferrer">
+                            {doc.fileName || 'Download'}
+                          </a>
+                        ) : (
+                          <small>{doc.fileName || 'Marked only'}</small>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {selectedPrLead.adminNotes && (
+                <div className="admin-modal-section" style={{ marginTop: 16 }}>
+                  <h4>Admin Notes</h4>
+                  <p className="pr-lead-notes-block">{selectedPrLead.adminNotes}</p>
+                </div>
+              )}
+
+              <div className="pr-lead-view-actions">
+                <button type="button" className="followup-cancel-btn" onClick={closePrLeadModal}>Close</button>
+                <button type="button" className="admin-action-btn" style={{ background: '#f59e0b', color: '#fff', border: 'none' }} onClick={() => setPrModalMode('edit')}>
+                  <Edit size={14} /> Edit
+                </button>
+                <button type="button" className="admin-action-btn" style={{ background: '#2563eb', color: '#fff', border: 'none' }} onClick={() => setPrModalMode('mail')}>
+                  <Mail size={14} /> Send Email
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {selectedPrLead && prModalMode === 'edit' && prEditData && (
+        <div className="admin-modal-overlay">
+          <div className="admin-modal edit-profile-modal">
+            <div className="admin-modal-header">
+              <div>
+                <h3>Edit Australia PR Lead</h3>
+                <p className="pr-lead-modal-subtitle">Update candidate details and follow-up status</p>
+              </div>
+              <button className="admin-modal-close" onClick={closePrLeadModal}>✕</button>
+            </div>
+            <form onSubmit={handleUpdatePrLead}>
+              <div className="admin-modal-body">
+                <div className="edit-profile-grid">
+                  <div className="edit-profile-field">
+                    <label>Full name</label>
+                    <input
+                      value={prEditData.name}
+                      onChange={(e) => setPrEditData({ ...prEditData, name: e.target.value })}
+                      required
+                    />
+                  </div>
+                  <div className="edit-profile-field">
+                    <label>Phone / WhatsApp</label>
+                    <input
+                      value={prEditData.phone}
+                      onChange={(e) => setPrEditData({ ...prEditData, phone: e.target.value })}
+                      required
+                    />
+                  </div>
+                  <div className="edit-profile-field">
+                    <label>Email</label>
+                    <input
+                      type="email"
+                      value={prEditData.email}
+                      onChange={(e) => setPrEditData({ ...prEditData, email: e.target.value })}
+                      required
+                    />
+                  </div>
+                  <div className="edit-profile-field">
+                    <label>Status</label>
+                    <CustomSelect
+                      id="pr-edit-status"
+                      className="admin-portal-select admin-portal-select-full"
+                      value={prEditData.status}
+                      onChange={(e) => setPrEditData({ ...prEditData, status: e.target.value })}
+                      options={[
+                        { value: 'New', label: 'New' },
+                        { value: 'Contacted', label: 'Contacted' },
+                        { value: 'Converted', label: 'Converted' },
+                        { value: 'Closed', label: 'Closed' },
+                      ]}
+                    />
+                  </div>
+                  <div className="edit-profile-field edit-profile-field-full">
+                    <label>Occupation</label>
+                    <input
+                      value={prEditData.occupation}
+                      onChange={(e) => setPrEditData({ ...prEditData, occupation: e.target.value })}
+                      required
+                    />
+                  </div>
+                  <div className="edit-profile-field">
+                    <label>ANZSCO</label>
+                    <input
+                      value={prEditData.anzsco}
+                      onChange={(e) => setPrEditData({ ...prEditData, anzsco: e.target.value })}
+                    />
+                  </div>
+                  <div className="edit-profile-field">
+                    <label>Assessing body</label>
+                    <input
+                      value={prEditData.assessingBody}
+                      onChange={(e) => setPrEditData({ ...prEditData, assessingBody: e.target.value })}
+                    />
+                  </div>
+                  <div className="edit-profile-field">
+                    <label>Origin</label>
+                    <CustomSelect
+                      id="pr-edit-origin"
+                      className="admin-portal-select admin-portal-select-full"
+                      value={prEditData.origin || ''}
+                      onChange={(e) => setPrEditData({ ...prEditData, origin: e.target.value })}
+                      options={[
+                        { value: '', label: 'Not set' },
+                        { value: 'offshore', label: 'Offshore' },
+                        { value: 'onshore', label: 'Onshore' },
+                      ]}
+                    />
+                  </div>
+                  <div className="edit-profile-field">
+                    <label>Country</label>
+                    <input
+                      value={prEditData.country}
+                      onChange={(e) => setPrEditData({ ...prEditData, country: e.target.value })}
+                    />
+                  </div>
+                  <div className="edit-profile-field">
+                    <label>State (AU)</label>
+                    <input
+                      value={prEditData.state}
+                      onChange={(e) => setPrEditData({ ...prEditData, state: e.target.value })}
+                    />
+                  </div>
+                  <div className="edit-profile-field edit-profile-field-full">
+                    <label>Experience / training notes</label>
+                    <textarea
+                      className="followup-textarea"
+                      value={prEditData.existingExperience}
+                      onChange={(e) => setPrEditData({ ...prEditData, existingExperience: e.target.value })}
+                      rows={3}
+                    />
+                  </div>
+                  <div className="edit-profile-field edit-profile-field-full">
+                    <label>Admin notes</label>
+                    <textarea
+                      className="followup-textarea"
+                      value={prEditData.adminNotes}
+                      onChange={(e) => setPrEditData({ ...prEditData, adminNotes: e.target.value })}
+                      rows={3}
+                    />
+                  </div>
+                </div>
+              </div>
+              <div className="edit-profile-footer">
+                <button type="button" className="followup-cancel-btn" onClick={() => setPrModalMode('view')}>Cancel</button>
+                <button type="submit" className="followup-send-btn">Save Changes</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {selectedPrLead && prModalMode === 'mail' && (
+        <div className="admin-modal-overlay">
+          <div className="admin-modal followup-modal">
+            <div className="admin-modal-header">
+              <div>
+                <h3>Send Email</h3>
+                <p className="followup-modal-subtitle">
+                  Write freely here — on submit the email is sent in a professional RouteUp format to {selectedPrLead.email}
+                </p>
+              </div>
+              <button className="admin-modal-close" onClick={closePrLeadModal}>✕</button>
+            </div>
+            <form onSubmit={handleSendPrMail}>
+              <div className="admin-modal-body">
+                <div className="followup-section">
+                  <label className="followup-label">To</label>
+                  <input className="pr-mail-readonly" value={selectedPrLead.email} readOnly />
+                </div>
+                <div className="followup-section">
+                  <label className="followup-label">Subject *</label>
+                  <input
+                    className="pr-mail-input"
+                    value={prMailSubject}
+                    onChange={(e) => setPrMailSubject(e.target.value)}
+                    placeholder="Email subject"
+                    required
+                  />
+                </div>
+                <div className="followup-section">
+                  <label className="followup-label">Message *</label>
+                  <textarea
+                    className="followup-textarea"
+                    value={prMailMessage}
+                    onChange={(e) => setPrMailMessage(e.target.value)}
+                    placeholder="Write your message in any format..."
+                    rows={8}
+                    required
+                  />
+                </div>
+                <div className="followup-section">
+                  <label className="followup-label">Attachments (optional)</label>
+                  <label className="followup-upload-zone">
+                    <input
+                      type="file"
+                      multiple
+                      onChange={(e) => {
+                        const selected = Array.from(e.target.files || []);
+                        setPrMailFiles((prev) => [...prev, ...selected].slice(0, 10));
+                        e.target.value = '';
+                      }}
+                    />
+                    <UploadCloud size={22} />
+                    <div className="followup-upload-title">Add files to attach</div>
+                    <div className="followup-upload-hint">PDF, DOC, images, ZIP — up to 10 files</div>
+                  </label>
+                  {prMailFiles.length > 0 && (
+                    <div className="followup-file-list">
+                      {prMailFiles.map((file, index) => (
+                        <div className="followup-file-item" key={`${file.name}-${index}`}>
+                          <div className="followup-file-info">
+                            <span>{file.name}</span>
+                            <small>{(file.size / 1024).toFixed(1)} KB</small>
+                          </div>
+                          <button
+                            type="button"
+                            className="followup-file-remove"
+                            onClick={() => setPrMailFiles((prev) => prev.filter((_, i) => i !== index))}
+                          >
+                            Remove
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
+              <div className="followup-modal-footer">
+                <button type="button" className="followup-cancel-btn" onClick={closePrLeadModal}>Cancel</button>
+                <button type="submit" className="followup-send-btn" disabled={prMailSending}>
+                  <Send size={16} />
+                  {prMailSending ? 'Sending...' : 'Send Professional Email'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* DETAIL MODAL (BOOKING REVIEW) */}
       {selectedBooking && (

@@ -4,6 +4,8 @@ import { Toaster } from 'react-hot-toast';
 import LandingPage from './components/LandingPage';
 import AdminLogin from './components/AdminLogin';
 import AdminDashboard from './components/AdminDashboard';
+import ApplyAustraliaPR from './components/ApplyAustraliaPR';
+import AustraliaPREligibility from './components/AustraliaPREligibility';
 
 // Custom wrapper to manage admin authentication & session checks
 const AdminRoute = () => {
@@ -74,6 +76,10 @@ function App() {
 
         {/* Protected Admin Console */}
         <Route path="/admin" element={<AdminRoute />} />
+
+        {/* Australia PR tools */}
+        <Route path="/apply-australia-pr" element={<ApplyAustraliaPR />} />
+        <Route path="/australia-pr-eligibility" element={<AustraliaPREligibility />} />
 
         {/* Fallback to home */}
         <Route path="*" element={<Navigate to="/" replace />} />

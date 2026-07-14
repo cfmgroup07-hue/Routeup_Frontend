@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { Link } from 'react-router-dom';
 import { io } from 'socket.io-client';
 import * as Icons from 'lucide-react';
 const { 
@@ -297,6 +298,15 @@ const LandingPage = ({ onAdminClick }) => {
     };
   }, []);
 
+  useEffect(() => {
+    const hash = window.location.hash.replace('#', '');
+    if (!hash) return;
+    const timer = setTimeout(() => {
+      document.getElementById(hash)?.scrollIntoView({ behavior: 'smooth' });
+    }, 150);
+    return () => clearTimeout(timer);
+  }, []);
+
   const heroStats = [
     { target: CAREER_PATHS_COUNT, label: 'Career Paths Mapped' },
     { target: INDUSTRIES_COUNT, label: 'Industries Covered' },
@@ -514,6 +524,7 @@ const LandingPage = ({ onAdminClick }) => {
           <a href="#about">About Us</a>
           <a href="#services">Services</a>
           <a href="#education">Visa Guide</a>
+          <Link to="/apply-australia-pr">Australia PR</Link>
           <a href="#awareness">Scam Alerts</a>
           <button className="nav-cta" onClick={scrollToForm}>Book Session</button>
         </div>
@@ -1193,6 +1204,7 @@ const LandingPage = ({ onAdminClick }) => {
             <a href="#about">About Us</a>
             <a href="#services">Services</a>
             <a href="#education">Visa Guide</a>
+            <Link to="/apply-australia-pr">Australia PR</Link>
             <a href="#awareness">Scam Alerts</a>
             <button onClick={scrollToForm} style={{ color: '#fff', fontWeight: '700', border: 'none', background: 'none', cursor: 'pointer' }}>Book Session</button>
           </div>
