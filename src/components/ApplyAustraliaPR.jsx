@@ -51,8 +51,15 @@ const ApplyAustraliaPR = () => {
     }
   };
 
+  const MAX_FILE_BYTES = 10 * 1024 * 1024; // 10MB per file
+  const MAX_TOTAL_BYTES = 20 * 1024 * 1024; // 20MB total request
+
   const handleAddDocument = () => {
     if (!occupation || !docTitle) return;
+    if (selectedFile && selectedFile.size > MAX_FILE_BYTES) {
+      toast.error('Each file must be under 10MB. Please compress or use a smaller file.');
+      return;
+    }
     const name = selectedFile?.name || fileName || 'file attached';
     setUploaded((prev) => ({
       ...prev,
@@ -69,6 +76,13 @@ const ApplyAustraliaPR = () => {
     }
     if (!occupation) {
       toast.error('Please select your occupation first.');
+      return;
+    }
+
+    const files = Object.values(uploaded).map((info) => info.file).filter(Boolean);
+    const totalSize = files.reduce((sum, file) => sum + (file.size || 0), 0);
+    if (totalSize > MAX_TOTAL_BYTES) {
+      toast.error('Total upload size must be under 20MB. Please upload fewer or smaller files.');
       return;
     }
 
@@ -104,6 +118,9 @@ const ApplyAustraliaPR = () => {
       });
 
       if (!res.ok) {
+        if (res.status === 413) {
+          throw new Error('Files are too large for the server. Please upload smaller files (under 10MB each).');
+        }
         const err = await res.json().catch(() => ({}));
         throw new Error(err.message || 'Failed to submit');
       }
