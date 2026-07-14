@@ -10,6 +10,7 @@ const {
 } = Icons;
 import { API_URL, SOCKET_URL } from '../config';
 import { getFlagImageUrl } from '../utils/countries';
+import SiteNavbar from './SiteNavbar';
 
 const PRICE_PER_SERVICE = 250;
 
@@ -516,19 +517,7 @@ const LandingPage = ({ onAdminClick }) => {
   return (
     <div className="app-container">
       {/* HEADER */}
-      <nav className="navbar">
-        <div className="logo-container" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>
-          <img src="/Routeup Logo.png" alt="RouteUp Logo" style={{ height: '44px', objectFit: 'contain' }} />
-        </div>
-        <div className="nav-links">
-          <a href="#about">About Us</a>
-          <a href="#services">Services</a>
-          <a href="#education">Visa Guide</a>
-          <Link to="/apply-australia-pr">Apply Australia PR</Link>
-          <a href="#awareness">Scam Alerts</a>
-          <button className="nav-cta" onClick={scrollToForm}>Book Session</button>
-        </div>
-      </nav>
+      <SiteNavbar />
 
       {/* HERO */}
       <header className="hero">
