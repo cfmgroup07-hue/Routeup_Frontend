@@ -524,7 +524,7 @@ const LandingPage = ({ onAdminClick }) => {
           <a href="#about">About Us</a>
           <a href="#services">Services</a>
           <a href="#education">Visa Guide</a>
-          <Link to="/apply-australia-pr">Australia PR</Link>
+          <Link to="/apply-australia-pr">Apply Australia PR</Link>
           <a href="#awareness">Scam Alerts</a>
           <button className="nav-cta" onClick={scrollToForm}>Book Session</button>
         </div>
@@ -1204,7 +1204,7 @@ const LandingPage = ({ onAdminClick }) => {
             <a href="#about">About Us</a>
             <a href="#services">Services</a>
             <a href="#education">Visa Guide</a>
-            <Link to="/apply-australia-pr">Australia PR</Link>
+            <Link to="/apply-australia-pr">Apply Australia PR</Link>
             <a href="#awareness">Scam Alerts</a>
             <button onClick={scrollToForm} style={{ color: '#fff', fontWeight: '700', border: 'none', background: 'none', cursor: 'pointer' }}>Book Session</button>
           </div>

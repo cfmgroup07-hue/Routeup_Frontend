@@ -26,7 +26,7 @@ const SiteNavbar = ({ active = '' }) => {
         <button type="button" onClick={() => goHomeSection('#services')}>Services</button>
         <button type="button" onClick={() => goHomeSection('#education')}>Visa Guide</button>
         <Link to="/apply-australia-pr" className={active === 'australia-pr' ? 'nav-active' : ''}>
-          Australia PR
+          Apply Australia PR
         </Link>
         <button type="button" onClick={() => goHomeSection('#awareness')}>Scam Alerts</button>
         <button

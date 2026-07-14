@@ -189,8 +189,7 @@ const AustraliaPREligibility = () => {
                 {submitting ? 'Saving...' : 'Book a Visa & Migration session — Rs.2999'}
               </button>
               <p className="pr-secure-note">
-                This books an informational advisory session, not an assessment application. Payment is
-                completed on the Book Session page.
+                After you submit, our team will connect with you within 24 hours.
               </p>
               <p className="pr-back-link">
                 Already have your documents?{' '}
@@ -206,7 +205,7 @@ const AustraliaPREligibility = () => {
         <p>Career Advisory & Migration Guidance</p>
         <div className="pr-footer-links">
           <Link to="/">Home</Link>
-          <Link to="/apply-australia-pr">Australia PR</Link>
+          <Link to="/apply-australia-pr">Apply Australia PR</Link>
           <Link to="/australia-pr-eligibility">Eligibility Check</Link>
           <Link to="/#book">Book Session</Link>
         </div>
