@@ -53,6 +53,13 @@ const SiteNavbar = ({ active = '' }) => {
         <button type="button" onClick={() => goHomeSection('#services')}>Services</button>
         <button type="button" onClick={() => goHomeSection('#education')}>Visa Guide</button>
         <Link
+          to="/study-abroad-documents"
+          className={active === 'study-abroad' ? 'nav-active' : ''}
+          onClick={closeMenu}
+        >
+          Study Abroad
+        </Link>
+        <Link
           to="/apply-australia-pr"
           className={active === 'australia-pr' ? 'nav-active' : ''}
           onClick={closeMenu}

@@ -52,7 +52,7 @@ const ApplyAustraliaPR = () => {
   };
 
   const MAX_FILE_BYTES = 10 * 1024 * 1024; // 10MB per file
-  const MAX_TOTAL_BYTES = 20 * 1024 * 1024; // 20MB total request
+  const MAX_TOTAL_BYTES = 100 * 1024 * 1024; // 100MB total (many required docs)
 
   const missingDocs = useMemo(
     () => allDocs.filter((doc) => !uploaded[doc]?.file),
@@ -98,7 +98,7 @@ const ApplyAustraliaPR = () => {
     const files = Object.values(uploaded).map((info) => info.file).filter(Boolean);
     const totalSize = files.reduce((sum, file) => sum + (file.size || 0), 0);
     if (totalSize > MAX_TOTAL_BYTES) {
-      toast.error('Total upload size must be under 20MB. Please upload fewer or smaller files.');
+      toast.error('Total upload size must be under 100MB. Please compress larger files.');
       return;
     }
 
@@ -320,8 +320,11 @@ const ApplyAustraliaPR = () => {
               <div className="pr-card">
                 <p className="pr-label">Standard documents (all applicants) — all required *</p>
                 {UNIVERSAL_DOCS.map((doc) => (
-                  <div className={`pr-check-row ${uploaded[doc]?.file ? '' : 'pr-check-required-missing'}`} key={doc}>
-                    <span>{doc} <span className="req">*</span></span>
+                  <div className="pr-check-row" key={doc}>
+                    <span className="pr-check-doc-label">
+                      <span className={`pr-check-dot ${uploaded[doc]?.file ? 'done' : 'pending'}`} />
+                      <span>{doc} <span className="req">*</span></span>
+                    </span>
                     {uploaded[doc]?.file ? (
                       <span className="pr-check-ok">
                         <Check size={14} /> {uploaded[doc].fileName}
@@ -338,8 +341,11 @@ const ApplyAustraliaPR = () => {
                   {occupation.body} checklist — {occupation.name} — all required *
                 </p>
                 {occupation.docs.map((doc) => (
-                  <div className={`pr-check-row ${uploaded[doc]?.file ? '' : 'pr-check-required-missing'}`} key={doc}>
-                    <span>{doc} <span className="req">*</span></span>
+                  <div className="pr-check-row" key={doc}>
+                    <span className="pr-check-doc-label">
+                      <span className={`pr-check-dot ${uploaded[doc]?.file ? 'done' : 'pending'}`} />
+                      <span>{doc} <span className="req">*</span></span>
+                    </span>
                     {uploaded[doc]?.file ? (
                       <span className="pr-check-ok">
                         <Check size={14} /> {uploaded[doc].fileName}
@@ -402,11 +408,6 @@ const ApplyAustraliaPR = () => {
                       ? 'Book a Visa & Migration session'
                       : `Upload all ${totalCount} documents to continue`}
                 </button>
-                {!allDocsUploaded && (
-                  <p className="pr-secure-note" style={{ color: '#b45309' }}>
-                    Missing documents mean your application will not be considered for an interview.
-                  </p>
-                )}
                 <p className="pr-secure-note">
                   After you submit, our team will connect with you within 24 hours.
                 </p>

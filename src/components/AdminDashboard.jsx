@@ -105,6 +105,18 @@ const AdminDashboard = ({ onLogout }) => {
   const [prMailFiles, setPrMailFiles] = useState([]);
   const [prMailSending, setPrMailSending] = useState(false);
 
+  // Study Abroad / Students leads
+  const [studentLeads, setStudentLeads] = useState([]);
+  const [studentSearchTerm, setStudentSearchTerm] = useState('');
+  const [studentCountryFilter, setStudentCountryFilter] = useState('');
+  const [selectedStudentLead, setSelectedStudentLead] = useState(null);
+  const [studentModalMode, setStudentModalMode] = useState(null); // 'view' | 'edit'
+  const [studentLeadsLoading, setStudentLeadsLoading] = useState(false);
+  const [studentEditData, setStudentEditData] = useState(null);
+  const [studentMailMessage, setStudentMailMessage] = useState('');
+  const [studentWrongDocs, setStudentWrongDocs] = useState([]);
+  const [studentMailSending, setStudentMailSending] = useState(false);
+
   // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
@@ -558,6 +570,191 @@ const AdminDashboard = ({ onLogout }) => {
     }
   };
 
+  const fetchStudentLeads = async () => {
+    const token = localStorage.getItem('adminToken');
+    if (!token) return;
+    setStudentLeadsLoading(true);
+    try {
+      const response = await fetch(`${API_URL}/api/study-abroad-leads`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setStudentLeads(data);
+      } else if (response.status === 401) {
+        handleUnauthorized();
+      }
+    } catch (error) {
+      console.error('Failed to fetch study abroad leads:', error);
+    } finally {
+      setStudentLeadsLoading(false);
+    }
+  };
+
+  const handleDeleteStudentLead = async (id) => {
+    if (!window.confirm('Delete this student lead?')) return;
+    const token = localStorage.getItem('adminToken');
+    try {
+      const response = await fetch(`${API_URL}/api/study-abroad-leads/${id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (response.ok) {
+        setStudentLeads((prev) => prev.filter((l) => l._id !== id));
+        if (selectedStudentLead?._id === id) closeStudentLeadModal();
+        toast.success('Student lead deleted');
+      } else if (response.status === 401) {
+        handleUnauthorized();
+      } else {
+        toast.error('Failed to delete lead');
+      }
+    } catch {
+      toast.error('Error deleting lead');
+    }
+  };
+
+  const openStudentLeadModal = (lead, mode = 'view') => {
+    setSelectedStudentLead(lead);
+    setStudentModalMode(mode);
+    setStudentEditData({
+      name: lead.name || '',
+      phone: lead.phone || '',
+      email: lead.email || '',
+      applyingCourse: lead.applyingCourse || '',
+      targetUniversity: lead.targetUniversity || '',
+      country: lead.country || '',
+      status: lead.status || 'New',
+      adminNotes: lead.adminNotes || '',
+    });
+    setStudentMailMessage('');
+    setStudentWrongDocs(
+      (lead.uploadedDocuments || [])
+        .filter((d) => d.needsReupload)
+        .map((d) => d.title)
+    );
+  };
+
+  const closeStudentLeadModal = () => {
+    setSelectedStudentLead(null);
+    setStudentModalMode(null);
+    setStudentEditData(null);
+    setStudentMailMessage('');
+    setStudentWrongDocs([]);
+    setStudentMailSending(false);
+  };
+
+  const handleUpdateStudentLead = async (e) => {
+    e.preventDefault();
+    if (!selectedStudentLead || !studentEditData) return;
+    const token = localStorage.getItem('adminToken');
+    try {
+      const response = await fetch(`${API_URL}/api/study-abroad-leads/${selectedStudentLead._id}`, {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(studentEditData),
+      });
+      if (response.ok) {
+        const updated = await response.json();
+        setStudentLeads((prev) => prev.map((l) => (l._id === updated._id ? updated : l)));
+        setSelectedStudentLead(updated);
+        toast.success('Student lead updated');
+        setStudentModalMode('view');
+      } else if (response.status === 401) {
+        handleUnauthorized();
+      } else {
+        toast.error('Failed to update lead');
+      }
+    } catch {
+      toast.error('Error updating lead');
+    }
+  };
+
+  const handleStudentDocDownload = async (doc) => {
+    if (!doc?.filePath) return;
+    try {
+      const response = await fetch(`${API_URL}${doc.filePath}`);
+      if (!response.ok) throw new Error('Download failed');
+      const blob = await response.blob();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = doc.fileName || 'document';
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+    } catch {
+      toast.error('Could not download file');
+      window.open(`${API_URL}${doc.filePath}`, '_blank', 'noopener,noreferrer');
+    }
+  };
+
+  const toggleStudentWrongDoc = (title) => {
+    setStudentWrongDocs((prev) =>
+      prev.includes(title) ? prev.filter((t) => t !== title) : [...prev, title]
+    );
+  };
+
+  const handleSendStudentReuploadMail = async (e) => {
+    e.preventDefault();
+    if (!selectedStudentLead) return;
+    if (studentWrongDocs.length === 0) {
+      toast.error('Select at least one incorrect document.');
+      return;
+    }
+
+    const token = localStorage.getItem('adminToken');
+    setStudentMailSending(true);
+    try {
+      const response = await fetch(
+        `${API_URL}/api/study-abroad-leads/${selectedStudentLead._id}/request-reupload`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            documentTitles: studentWrongDocs,
+            message: studentMailMessage.trim(),
+          }),
+        }
+      );
+      const data = await response.json().catch(() => ({}));
+      if (response.ok || response.status === 502) {
+        if (data.lead) {
+          setStudentLeads((prev) => prev.map((l) => (l._id === data.lead._id ? data.lead : l)));
+          setSelectedStudentLead(data.lead);
+        }
+        if (response.ok) {
+          toast.success('Re-upload email sent to student');
+          closeStudentLeadModal();
+        } else {
+          toast.error(data.message || 'Email failed — link was still created');
+          if (data.reuploadUrl) {
+            try {
+              await navigator.clipboard.writeText(data.reuploadUrl);
+              toast.success('Re-upload link copied to clipboard');
+            } catch {
+              /* ignore */
+            }
+          }
+        }
+      } else if (response.status === 401) {
+        handleUnauthorized();
+      } else {
+        toast.error(data.message || 'Failed to send email');
+      }
+    } catch {
+      toast.error('Error sending re-upload email');
+    } finally {
+      setStudentMailSending(false);
+    }
+  };
+
   // Fetch Services List
   const fetchServicesList = async () => {
     try {
@@ -589,6 +786,7 @@ const AdminDashboard = ({ onLogout }) => {
     fetchServicesList();
     fetchVisaPathwaysList();
     fetchPrLeads();
+    fetchStudentLeads();
 
     // Socket.io Connection
     const socket = io(`${SOCKET_URL}`);
@@ -652,6 +850,24 @@ const AdminDashboard = ({ onLogout }) => {
     });
     socket.on('visa_pathway_deleted', (deletedId) => {
       setVisaPathwaysList(prev => prev.filter(p => p._id !== deletedId));
+    });
+
+    socket.on('study_abroad_lead_updated', (updatedLead) => {
+      setStudentLeads((prev) => {
+        const exists = prev.some((l) => l._id === updatedLead._id);
+        if (!exists) return [updatedLead, ...prev];
+        return prev.map((l) => (l._id === updatedLead._id ? updatedLead : l));
+      });
+      setSelectedStudentLead((current) =>
+        current && current._id === updatedLead._id ? updatedLead : current
+      );
+      setSocketNotification({
+        title: 'Student documents updated',
+        message: `${updatedLead.name} re-uploaded study abroad documents.`,
+        booking: null,
+        openStudents: true,
+      });
+      setTimeout(() => setSocketNotification(null), 8000);
     });
 
     return () => {
@@ -938,6 +1154,25 @@ const AdminDashboard = ({ onLogout }) => {
   const currentPrLeads = filteredPrLeads.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
   const totalPrLeadsPages = Math.ceil(filteredPrLeads.length / itemsPerPage);
 
+  const studentCountries = [...new Set(studentLeads.map((l) => l.country).filter(Boolean))].sort();
+  const filteredStudentLeads = studentLeads.filter((lead) => {
+    const q = studentSearchTerm.toLowerCase();
+    const matchesSearch =
+      lead.name?.toLowerCase().includes(q) ||
+      lead.email?.toLowerCase().includes(q) ||
+      lead.phone?.includes(studentSearchTerm) ||
+      lead.applyingCourse?.toLowerCase().includes(q) ||
+      lead.country?.toLowerCase().includes(q) ||
+      lead.targetUniversity?.toLowerCase().includes(q);
+    const matchesCountry = !studentCountryFilter || lead.country === studentCountryFilter;
+    return matchesSearch && matchesCountry;
+  });
+  const currentStudentLeads = filteredStudentLeads.slice(
+    (currentPage - 1) * itemsPerPage,
+    currentPage * itemsPerPage
+  );
+  const totalStudentLeadsPages = Math.ceil(filteredStudentLeads.length / itemsPerPage);
+
   const renderPagination = (totalPages) => {
     if (totalPages <= 1) return null;
     return (
@@ -1016,6 +1251,13 @@ const AdminDashboard = ({ onLogout }) => {
             <Plane size={18} style={{ flexShrink: 0 }} />
             <span className="nav-label">Australia PR Leads</span>
           </button>
+          <button 
+            className={`admin-sidebar-nav-btn ${activeTab === 'students' ? 'active' : ''}`}
+            onClick={() => setActiveTab('students')}
+          >
+            <GraduationCap size={18} style={{ flexShrink: 0 }} />
+            <span className="nav-label">Students</span>
+          </button>
         </nav>
 
         <div className="admin-sidebar-footer">
@@ -1039,6 +1281,7 @@ const AdminDashboard = ({ onLogout }) => {
             {activeTab === 'services' && 'Advisory Services Catalog'}
             {activeTab === 'visa-pathways' && 'Visa Pathways & Country Guidance'}
             {activeTab === 'australia-pr' && 'Australia PR Leads'}
+            {activeTab === 'students' && 'Students — Study Abroad'}
           </h2>
         </header>
 
@@ -1049,16 +1292,30 @@ const AdminDashboard = ({ onLogout }) => {
             <div className="socket-notification-body">
               <h5>{socketNotification.title}</h5>
               <p>{socketNotification.message}</p>
-              <button 
-                className="admin-action-btn" 
-                style={{ fontSize: '11px', padding: '4px 8px' }}
-                onClick={() => {
-                  openModal(socketNotification.booking);
-                  setSocketNotification(null);
-                }}
-              >
-                View Booking
-              </button>
+              {socketNotification.booking && (
+                <button 
+                  className="admin-action-btn" 
+                  style={{ fontSize: '11px', padding: '4px 8px' }}
+                  onClick={() => {
+                    openModal(socketNotification.booking);
+                    setSocketNotification(null);
+                  }}
+                >
+                  View Booking
+                </button>
+              )}
+              {socketNotification.openStudents && (
+                <button
+                  className="admin-action-btn"
+                  style={{ fontSize: '11px', padding: '4px 8px' }}
+                  onClick={() => {
+                    setActiveTab('students');
+                    setSocketNotification(null);
+                  }}
+                >
+                  Open Students
+                </button>
+              )}
             </div>
             <button className="socket-notification-close" onClick={() => setSocketNotification(null)}>✕</button>
           </div>
@@ -1644,6 +1901,173 @@ const AdminDashboard = ({ onLogout }) => {
                   </table>
                 )}
                 {renderPagination(totalPrLeadsPages)}
+              </section>
+            </>
+          )}
+
+          {activeTab === 'students' && (
+            <>
+              <section className="admin-controls-card">
+                <div className="admin-search-wrapper">
+                  <Search className="admin-search-icon" size={18} />
+                  <input
+                    type="text"
+                    placeholder="Search by name, email, course, country..."
+                    value={studentSearchTerm}
+                    onChange={(e) => setStudentSearchTerm(e.target.value)}
+                  />
+                </div>
+                <select
+                  value={studentCountryFilter}
+                  onChange={(e) => {
+                    setStudentCountryFilter(e.target.value);
+                    setCurrentPage(1);
+                  }}
+                  style={{
+                    padding: '10px 14px',
+                    borderRadius: 8,
+                    border: '1px solid #e2e8f0',
+                    fontSize: 13,
+                    fontWeight: 600,
+                    color: '#334155',
+                    background: '#fff',
+                    minWidth: 180,
+                  }}
+                >
+                  <option value="">All countries</option>
+                  {studentCountries.map((c) => {
+                    const count = studentLeads.filter((l) => l.country === c).length;
+                    return (
+                      <option key={c} value={c}>
+                        {c} ({count})
+                      </option>
+                    );
+                  })}
+                </select>
+                <div style={{ fontSize: 13, color: '#64748b', fontWeight: 600 }}>
+                  {filteredStudentLeads.length} student{filteredStudentLeads.length === 1 ? '' : 's'}
+                </div>
+              </section>
+
+              <section className="admin-table-container">
+                {studentLeadsLoading ? (
+                  <div className="no-bookings">Loading student leads...</div>
+                ) : filteredStudentLeads.length === 0 ? (
+                  <div className="no-bookings">No study abroad student leads yet</div>
+                ) : (
+                  <table className="admin-table">
+                    <thead>
+                      <tr>
+                        <th>Date</th>
+                        <th>Student</th>
+                        <th>Contact</th>
+                        <th>Course</th>
+                        <th>Country</th>
+                        <th>Docs</th>
+                        <th>Status</th>
+                        <th style={{ width: 200 }}>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {currentStudentLeads.map((lead) => (
+                        <tr key={lead._id}>
+                          <td style={{ whiteSpace: 'nowrap', fontSize: 13 }}>
+                            {new Date(lead.createdAt).toLocaleDateString('en-IN', {
+                              day: 'numeric',
+                              month: 'short',
+                              year: '2-digit',
+                            })}
+                          </td>
+                          <td>
+                            <div style={{ fontWeight: 700, color: '#0f172a' }}>{lead.name}</div>
+                            <div style={{ fontSize: 12, color: '#64748b' }}>
+                              {lead.targetUniversity || '—'}
+                            </div>
+                          </td>
+                          <td>
+                            <div style={{ fontSize: 13 }}>{lead.phone}</div>
+                            <div style={{ fontSize: 12, color: '#64748b' }}>{lead.email}</div>
+                          </td>
+                          <td style={{ fontSize: 13, maxWidth: 180 }}>
+                            <div style={{ fontWeight: 600 }}>{lead.applyingCourse}</div>
+                          </td>
+                          <td>
+                            <span
+                              className="admin-service-pill"
+                              style={{
+                                background: '#f0faf4',
+                                color: '#0d7c3d',
+                                borderColor: '#bbf7d0',
+                              }}
+                            >
+                              {lead.country}
+                            </span>
+                          </td>
+                          <td style={{ fontWeight: 700 }}>
+                            {(lead.uploadedDocuments || []).length}
+                            {lead.totalRequired ? (
+                              <span style={{ fontWeight: 500, color: '#94a3b8', fontSize: 12 }}>
+                                {' '}/ {lead.totalRequired}
+                              </span>
+                            ) : null}
+                          </td>
+                          <td>
+                            <span
+                              className={`badge ${
+                                lead.status === 'New'
+                                  ? 'status-new'
+                                  : lead.status === 'Contacted'
+                                  ? 'status-processing'
+                                  : lead.status === 'Converted'
+                                  ? 'status-completed'
+                                  : 'pay-pending'
+                              }`}
+                            >
+                              {lead.status}
+                            </span>
+                          </td>
+                          <td>
+                            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                              <button
+                                className="admin-action-btn icon-only"
+                                title="View"
+                                onClick={() => openStudentLeadModal(lead, 'view')}
+                                style={{ padding: 6, background: '#0d7c3d', color: '#fff', border: 'none' }}
+                              >
+                                <Eye size={14} />
+                              </button>
+                              <button
+                                className="admin-action-btn icon-only"
+                                title="Edit"
+                                onClick={() => openStudentLeadModal(lead, 'edit')}
+                                style={{ padding: 6, background: '#f59e0b', color: '#fff', border: 'none' }}
+                              >
+                                <Edit size={14} />
+                              </button>
+                              <button
+                                className="admin-action-btn icon-only"
+                                title="Request document re-upload"
+                                onClick={() => openStudentLeadModal(lead, 'mail')}
+                                style={{ padding: 6, background: '#2563eb', color: '#fff', border: 'none' }}
+                              >
+                                <Mail size={14} />
+                              </button>
+                              <button
+                                className="admin-action-btn icon-only delete-btn"
+                                title="Delete"
+                                onClick={() => handleDeleteStudentLead(lead._id)}
+                                style={{ padding: 6, background: '#ef4444', color: '#fff', border: 'none' }}
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                )}
+                {renderPagination(totalStudentLeadsPages)}
               </section>
             </>
           )}
@@ -2644,6 +3068,299 @@ const AdminDashboard = ({ onLogout }) => {
                 <button type="button" className="edit-profile-cancel-btn" onClick={() => setIsEditProfileModalOpen(false)}>Cancel</button>
                 <button type="submit" className="edit-profile-save-btn" disabled={loading}>
                   {loading ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* STUDY ABROAD STUDENT MODALS */}
+      {selectedStudentLead && studentModalMode === 'view' && (
+        <div className="admin-modal-overlay">
+          <div className="admin-modal student-view-modal">
+            <div className="admin-modal-header">
+              <div>
+                <h3>Student — Study Abroad</h3>
+                <p className="pr-lead-modal-subtitle">{selectedStudentLead.country}</p>
+              </div>
+              <button className="admin-modal-close" onClick={closeStudentLeadModal}>✕</button>
+            </div>
+            <div className="admin-modal-body">
+              <div className="pr-lead-view-banner">
+                <div>
+                  <strong>{selectedStudentLead.name}</strong>
+                  <span>{selectedStudentLead.applyingCourse}</span>
+                </div>
+                <span className={`badge ${
+                  selectedStudentLead.status === 'New' ? 'status-new'
+                    : selectedStudentLead.status === 'Contacted' ? 'status-processing'
+                    : selectedStudentLead.status === 'Converted' ? 'status-completed'
+                    : 'pay-pending'
+                }`}>
+                  {selectedStudentLead.status}
+                </span>
+              </div>
+
+              <div className="admin-modal-grid">
+                <div className="admin-modal-section">
+                  <h4><Users size={14} style={{ verticalAlign: 'middle', marginRight: 6 }} /> Student</h4>
+                  <div className="detail-item"><span className="detail-label">Name</span><span className="detail-val">{selectedStudentLead.name}</span></div>
+                  <div className="detail-item"><span className="detail-label">Phone</span><span className="detail-val">{selectedStudentLead.phone}</span></div>
+                  <div className="detail-item"><span className="detail-label">Email</span><span className="detail-val">{selectedStudentLead.email}</span></div>
+                  <div className="detail-item"><span className="detail-label">Country</span><span className="detail-val">{selectedStudentLead.country}</span></div>
+                </div>
+                <div className="admin-modal-section">
+                  <h4><GraduationCap size={14} style={{ verticalAlign: 'middle', marginRight: 6 }} /> Course</h4>
+                  <div className="detail-item"><span className="detail-label">Course</span><span className="detail-val">{selectedStudentLead.applyingCourse}</span></div>
+                  <div className="detail-item"><span className="detail-label">University</span><span className="detail-val">{selectedStudentLead.targetUniversity || '—'}</span></div>
+                  <div className="detail-item">
+                    <span className="detail-label">Submitted</span>
+                    <span className="detail-val">{new Date(selectedStudentLead.createdAt).toLocaleString()}</span>
+                  </div>
+                </div>
+              </div>
+
+              {selectedStudentLead.adminNotes && (
+                <div className="admin-modal-section student-view-notes">
+                  <h4>Admin Notes</h4>
+                  <p className="pr-lead-notes-block">{selectedStudentLead.adminNotes}</p>
+                </div>
+              )}
+
+              <div className="admin-modal-section student-view-docs">
+                <h4>Uploaded Documents ({(selectedStudentLead.uploadedDocuments || []).length})</h4>
+                {(selectedStudentLead.uploadedDocuments || []).length === 0 ? (
+                  <p className="student-reupload-empty">No documents attached</p>
+                ) : (
+                  <div className="pr-lead-doc-list">
+                    {selectedStudentLead.uploadedDocuments.map((doc, idx) => (
+                      <div className="pr-lead-doc-item student-view-doc-item" key={`${doc.title}-${idx}`}>
+                        <div className="student-view-doc-meta">
+                          <span className="student-view-doc-title">{doc.title}</span>
+                          {doc.fileName && <small className="student-view-doc-file">{doc.fileName}</small>}
+                          {doc.needsReupload && (
+                            <span className="student-view-doc-badge">Re-upload requested</span>
+                          )}
+                        </div>
+                        {doc.filePath ? (
+                          <div className="pr-lead-doc-actions">
+                            <a
+                              className="pr-doc-btn view"
+                              href={`${API_URL}${doc.filePath}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                            >
+                              <Eye size={13} /> View
+                            </a>
+                            <button
+                              type="button"
+                              className="pr-doc-btn download"
+                              onClick={() => handleStudentDocDownload(doc)}
+                            >
+                              <Download size={13} /> Download
+                            </button>
+                          </div>
+                        ) : (
+                          <span className="student-reupload-empty">No file</span>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+            <div className="edit-profile-footer">
+              <button type="button" className="edit-profile-cancel-btn" onClick={closeStudentLeadModal}>
+                Close
+              </button>
+              <button
+                type="button"
+                className="edit-profile-save-btn student-reupload-send-btn"
+                onClick={() => openStudentLeadModal(selectedStudentLead, 'mail')}
+              >
+                Request re-upload
+              </button>
+              <button
+                type="button"
+                className="edit-profile-save-btn"
+                onClick={() => openStudentLeadModal(selectedStudentLead, 'edit')}
+              >
+                Edit
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {selectedStudentLead && studentModalMode === 'edit' && studentEditData && (
+        <div className="admin-modal-overlay">
+          <div className="admin-modal edit-profile-modal">
+            <div className="admin-modal-header">
+              <h3>Edit Student Lead</h3>
+              <button className="admin-modal-close" onClick={closeStudentLeadModal}>✕</button>
+            </div>
+            <form onSubmit={handleUpdateStudentLead}>
+              <div className="admin-modal-body">
+                <div className="edit-profile-grid">
+                  <div className="edit-profile-field">
+                    <label htmlFor="student-edit-name">Name</label>
+                    <input
+                      id="student-edit-name"
+                      value={studentEditData.name}
+                      onChange={(e) => setStudentEditData({ ...studentEditData, name: e.target.value })}
+                      required
+                    />
+                  </div>
+                  <div className="edit-profile-field">
+                    <label htmlFor="student-edit-phone">Phone</label>
+                    <input
+                      id="student-edit-phone"
+                      value={studentEditData.phone}
+                      onChange={(e) => setStudentEditData({ ...studentEditData, phone: e.target.value })}
+                      required
+                    />
+                  </div>
+                  <div className="edit-profile-field">
+                    <label htmlFor="student-edit-email">Email</label>
+                    <input
+                      id="student-edit-email"
+                      type="email"
+                      value={studentEditData.email}
+                      onChange={(e) => setStudentEditData({ ...studentEditData, email: e.target.value })}
+                      required
+                    />
+                  </div>
+                  <div className="edit-profile-field">
+                    <label htmlFor="student-edit-country">Country</label>
+                    <input
+                      id="student-edit-country"
+                      value={studentEditData.country}
+                      onChange={(e) => setStudentEditData({ ...studentEditData, country: e.target.value })}
+                      required
+                    />
+                  </div>
+                  <div className="edit-profile-field">
+                    <label htmlFor="student-edit-course">Course</label>
+                    <input
+                      id="student-edit-course"
+                      value={studentEditData.applyingCourse}
+                      onChange={(e) => setStudentEditData({ ...studentEditData, applyingCourse: e.target.value })}
+                      required
+                    />
+                  </div>
+                  <div className="edit-profile-field">
+                    <label htmlFor="student-edit-university">University</label>
+                    <input
+                      id="student-edit-university"
+                      value={studentEditData.targetUniversity}
+                      onChange={(e) => setStudentEditData({ ...studentEditData, targetUniversity: e.target.value })}
+                    />
+                  </div>
+                  <div className="edit-profile-field edit-profile-field-full">
+                    <label htmlFor="student-edit-status">Status</label>
+                    <select
+                      id="student-edit-status"
+                      value={studentEditData.status}
+                      onChange={(e) => setStudentEditData({ ...studentEditData, status: e.target.value })}
+                    >
+                      <option value="New">New</option>
+                      <option value="Contacted">Contacted</option>
+                      <option value="Converted">Converted</option>
+                      <option value="Closed">Closed</option>
+                    </select>
+                  </div>
+                  <div className="edit-profile-field edit-profile-field-full">
+                    <label htmlFor="student-edit-notes">Admin Notes</label>
+                    <textarea
+                      id="student-edit-notes"
+                      rows={4}
+                      value={studentEditData.adminNotes}
+                      onChange={(e) => setStudentEditData({ ...studentEditData, adminNotes: e.target.value })}
+                      placeholder="Internal notes for this student..."
+                    />
+                  </div>
+                </div>
+              </div>
+              <div className="edit-profile-footer">
+                <button type="button" className="edit-profile-cancel-btn" onClick={closeStudentLeadModal}>
+                  Cancel
+                </button>
+                <button type="submit" className="edit-profile-save-btn">
+                  Save Changes
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {selectedStudentLead && studentModalMode === 'mail' && (
+        <div className="admin-modal-overlay">
+          <div className="admin-modal student-reupload-modal">
+            <div className="admin-modal-header">
+              <div>
+                <h3>Request document re-upload</h3>
+                <p className="pr-lead-modal-subtitle">
+                  Email <strong>{selectedStudentLead.email}</strong> a secure link for incorrect files
+                </p>
+              </div>
+              <button className="admin-modal-close" onClick={closeStudentLeadModal}>✕</button>
+            </div>
+            <form onSubmit={handleSendStudentReuploadMail}>
+              <div className="admin-modal-body">
+                <p className="student-reupload-help">
+                  Select the documents that are wrong. Student will get a link to re-upload only those files.
+                  When they submit, the database and this admin panel update automatically.
+                </p>
+
+                {(selectedStudentLead.uploadedDocuments || []).length === 0 ? (
+                  <p className="student-reupload-empty">No documents on this lead yet.</p>
+                ) : (
+                  <div className="student-reupload-doc-list">
+                    {selectedStudentLead.uploadedDocuments.map((doc, idx) => {
+                      const checked = studentWrongDocs.includes(doc.title);
+                      return (
+                        <label
+                          key={`${doc.title}-${idx}`}
+                          className={`student-reupload-doc-item${checked ? ' selected' : ''}`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => toggleStudentWrongDoc(doc.title)}
+                          />
+                          <span className="student-reupload-doc-text">
+                            <strong>{doc.title}</strong>
+                            {doc.fileName && <small>{doc.fileName}</small>}
+                          </span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
+
+                <div className="edit-profile-field" style={{ marginTop: 18 }}>
+                  <label htmlFor="student-reupload-note">Note to student (optional)</label>
+                  <textarea
+                    id="student-reupload-note"
+                    rows={3}
+                    value={studentMailMessage}
+                    onChange={(e) => setStudentMailMessage(e.target.value)}
+                    placeholder="e.g. Passport scan is blurry — please upload a clear colour PDF of all pages."
+                  />
+                </div>
+              </div>
+              <div className="edit-profile-footer">
+                <button type="button" className="edit-profile-cancel-btn" onClick={closeStudentLeadModal}>
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="edit-profile-save-btn student-reupload-send-btn"
+                  disabled={studentMailSending || studentWrongDocs.length === 0}
+                >
+                  {studentMailSending ? 'Sending...' : `Send link (${studentWrongDocs.length})`}
                 </button>
               </div>
             </form>

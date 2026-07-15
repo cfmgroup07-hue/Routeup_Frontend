@@ -2470,11 +2470,46 @@ h1, h2, h3, h4, h5, h6 {
   transition: border-color 0.2s, box-shadow 0.2s;
 }
 
+.edit-profile-field select,
+.edit-profile-field textarea {
+  width: 100%;
+  padding: 12px 14px;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 10px;
+  color: #0f172a;
+  font-size: 14px;
+  font-family: inherit;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  box-sizing: border-box;
+}
+
+.edit-profile-field select {
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%2364748b' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 14px center;
+  padding-right: 36px;
+  cursor: pointer;
+}
+
+.edit-profile-field textarea {
+  resize: vertical;
+  min-height: 100px;
+  line-height: 1.5;
+}
+
 .edit-profile-field input::placeholder {
   color: #94a3b8;
 }
 
-.edit-profile-field input:focus {
+.edit-profile-field textarea::placeholder {
+  color: #94a3b8;
+}
+
+.edit-profile-field input:focus,
+.edit-profile-field select:focus,
+.edit-profile-field textarea:focus {
   outline: none;
   border-color: #0d7c3d;
   box-shadow: 0 0 0 3px rgba(13, 124, 61, 0.12);
@@ -2513,6 +2548,184 @@ h1, h2, h3, h4, h5, h6 {
 .edit-profile-save-btn:disabled {
   opacity: 0.7;
   cursor: not-allowed;
+}
+
+.student-reupload-modal {
+  max-width: 640px;
+  width: 100%;
+}
+
+.student-reupload-help {
+  margin: 0 0 14px;
+  font-size: 13px;
+  line-height: 1.55;
+  color: #64748b;
+}
+
+.student-reupload-empty {
+  margin: 0;
+  font-size: 13px;
+  color: #94a3b8;
+}
+
+.student-reupload-doc-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 280px;
+  overflow-y: auto;
+  padding: 2px;
+}
+
+.student-reupload-doc-item {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 10px 12px;
+  border-radius: 10px;
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.student-reupload-doc-item:hover {
+  border-color: #cbd5e1;
+  background: #f8fafc;
+}
+
+.student-reupload-doc-item.selected {
+  border-color: #fcd34d;
+  background: #fffbeb;
+}
+
+.student-reupload-doc-item input[type='checkbox'] {
+  margin-top: 3px;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  accent-color: #0d7c3d;
+  cursor: pointer;
+}
+
+.student-reupload-doc-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.student-reupload-doc-text strong {
+  font-size: 13px;
+  font-weight: 700;
+  color: #0f172a;
+  line-height: 1.4;
+}
+
+.student-reupload-doc-text small {
+  font-size: 12px;
+  color: #94a3b8;
+  line-height: 1.35;
+  word-break: break-all;
+}
+
+.student-reupload-send-btn {
+  background: #2563eb !important;
+}
+
+.student-reupload-send-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.student-view-modal {
+  max-width: 780px;
+  width: 100%;
+}
+
+.student-view-notes,
+.student-view-docs {
+  margin-top: 18px;
+}
+
+.student-view-doc-item {
+  align-items: flex-start;
+  padding: 12px 14px;
+}
+
+.student-view-doc-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+
+.student-view-doc-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: #0f172a;
+  line-height: 1.45;
+}
+
+.student-view-doc-file {
+  font-size: 12px;
+  color: #94a3b8;
+  word-break: break-all;
+}
+
+.student-view-doc-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 700;
+  color: #b45309;
+  background: #fffbeb;
+  border: 1px solid #fcd34d;
+  border-radius: 999px;
+  padding: 3px 10px;
+  line-height: 1.2;
+  white-space: nowrap;
+}
+
+.student-view-modal .detail-item {
+  display: grid;
+  grid-template-columns: 100px 1fr;
+  gap: 8px;
+  align-items: baseline;
+  padding: 8px 0;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.student-view-modal .detail-item:last-child {
+  border-bottom: none;
+}
+
+.student-view-modal .detail-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: #94a3b8;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.student-view-modal .detail-val {
+  font-size: 14px;
+  font-weight: 600;
+  color: #0f172a;
+  word-break: break-word;
+}
+
+@media (max-width: 640px) {
+  .student-view-doc-item {
+    flex-direction: column;
+  }
+
+  .student-view-modal .detail-item {
+    grid-template-columns: 1fr;
+    gap: 2px;
+  }
 }
 
 .pathway-form-modal {
@@ -3438,19 +3651,6 @@ h1, h2, h3, h4, h5, h6 {
   padding: 10px 12px;
 }
 
-.pr-check-row.pr-check-required-missing {
-  background: #fffbeb;
-  margin: 0 -12px;
-  padding-left: 12px;
-  padding-right: 12px;
-  border-radius: 8px;
-}
-
-.pr-check-row.pr-check-required-missing .pr-check-pending {
-  color: #b45309;
-  font-weight: 700;
-}
-
 .pr-check-row {
   display: flex;
   align-items: flex-start;
@@ -3468,6 +3668,32 @@ h1, h2, h3, h4, h5, h6 {
   padding-top: 4px;
 }
 
+.pr-check-doc-label {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+}
+
+.pr-check-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+  margin-top: 5px;
+}
+
+.pr-check-dot.pending {
+  background: #eab308;
+  box-shadow: 0 0 0 3px rgba(234, 179, 8, 0.2);
+}
+
+.pr-check-dot.done {
+  background: #16a34a;
+  box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.18);
+}
+
 .pr-check-ok {
   display: inline-flex;
   align-items: center;
@@ -3480,8 +3706,9 @@ h1, h2, h3, h4, h5, h6 {
 
 .pr-check-pending {
   font-size: 12px;
-  color: #94a3b8;
+  color: #a16207;
   white-space: nowrap;
+  font-weight: 600;
 }
 
 .pr-gap-block {

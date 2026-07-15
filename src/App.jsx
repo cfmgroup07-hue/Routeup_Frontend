@@ -6,6 +6,9 @@ import AdminLogin from './components/AdminLogin';
 import AdminDashboard from './components/AdminDashboard';
 import ApplyAustraliaPR from './components/ApplyAustraliaPR';
 import AustraliaPREligibility from './components/AustraliaPREligibility';
+import StudyAbroadDocuments from './components/StudyAbroadDocuments';
+import StudyAbroadWhyDocuments from './components/StudyAbroadWhyDocuments';
+import StudyAbroadReupload from './components/StudyAbroadReupload';
 
 // Custom wrapper to manage admin authentication & session checks
 const AdminRoute = () => {
@@ -80,6 +83,11 @@ function App() {
         {/* Australia PR tools */}
         <Route path="/apply-australia-pr" element={<ApplyAustraliaPR />} />
         <Route path="/australia-pr-eligibility" element={<AustraliaPREligibility />} />
+
+        {/* Study Abroad tools */}
+        <Route path="/study-abroad-documents" element={<StudyAbroadDocuments />} />
+        <Route path="/study-abroad-why-documents" element={<StudyAbroadWhyDocuments />} />
+        <Route path="/study-abroad-reupload/:token" element={<StudyAbroadReupload />} />
 
         {/* Fallback to home */}
         <Route path="*" element={<Navigate to="/" replace />} />

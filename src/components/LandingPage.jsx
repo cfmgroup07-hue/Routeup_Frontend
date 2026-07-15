@@ -684,7 +684,7 @@ const LandingPage = ({ onAdminClick }) => {
       </section>
 
       {/* STUDENT STUDY ABROAD FLOW */}
-      <section className="section-padding student-section">
+      <section className="section-padding student-section" id="student-guide">
         <div className="section-title-wrapper">
           <div className="section-subtitle">Study Abroad</div>
           <h2 className="section-title">Study Abroad? Start With RouteUp</h2>
@@ -766,7 +766,12 @@ const LandingPage = ({ onAdminClick }) => {
         <div className="student-cta">
           <h3 className="heading-with-icon"><Lightbulb size={22} /> Don't Pick a University Before You Know the Work Visa Rules</h3>
           <p>Many students spend lakhs on courses overseas only to discover they can't work after graduation. RouteUp helps you choose a course where you can study, work, and potentially settle.</p>
-          <button onClick={scrollToForm}>Get Study Abroad Guidance</button>
+          <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', justifyContent: 'center' }}>
+            <Link to="/study-abroad-documents" className="hero-cta" style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>
+              Document Checklist
+            </Link>
+            <button onClick={scrollToForm}>Get Study Abroad Guidance</button>
+          </div>
         </div>
       </section>
 
