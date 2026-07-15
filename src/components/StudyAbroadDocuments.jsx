@@ -54,7 +54,7 @@ const StudyAbroadDocuments = () => {
   const handleAddDocument = () => {
     if (!country || !docTitle) return;
     if (!selectedFile) {
-      toast.error('Please choose a file for this document — all documents are required.');
+      toast.error('Please choose a file to add this document.');
       return;
     }
     if (selectedFile.size > MAX_FILE_BYTES) {
@@ -83,14 +83,10 @@ const StudyAbroadDocuments = () => {
       toast.error('Please select your destination country.');
       return;
     }
-    if (!allDocsUploaded) {
-      toast.error(
-        `All documents are required. Missing: ${missingDocs.slice(0, 3).join(', ')}${missingDocs.length > 3 ? ` +${missingDocs.length - 3} more` : ''}`
-      );
-      return;
-    }
 
-    const files = Object.values(uploaded).map((info) => info.file).filter(Boolean);
+    const files = allDocs
+      .filter((title) => uploaded[title]?.file)
+      .map((title) => uploaded[title].file);
     const totalSize = files.reduce((sum, file) => sum + (file.size || 0), 0);
     if (totalSize > MAX_TOTAL_BYTES) {
       toast.error('Total upload size must be under 100MB. Please compress larger files.');
@@ -108,11 +104,15 @@ const StudyAbroadDocuments = () => {
       formData.append('country', country);
       formData.append('totalRequired', String(totalCount));
 
-      const meta = Object.entries(uploaded).map(([title, info]) => ({
-        title,
-        fileName: info.fileName || '',
-        attached: Boolean(info.file),
-      }));
+      // Include full checklist so admin can see uploaded + missing titles
+      const meta = allDocs.map((title) => {
+        const info = uploaded[title];
+        return {
+          title,
+          fileName: info?.fileName || '',
+          attached: Boolean(info?.file),
+        };
+      });
       formData.append('documentMeta', JSON.stringify(meta));
       files.forEach((file) => formData.append('documents', file));
 
@@ -248,11 +248,10 @@ const StudyAbroadDocuments = () => {
           {country && (
             <>
               <div className="pr-card">
-                <h3 className="pr-card-title">
-                  Upload a document <span className="req">*</span>
-                </h3>
+                <h3 className="pr-card-title">Upload a document</h3>
                 <p className="pr-upload-required-note">
-                  Every document listed below is required. Incomplete uploads will not be considered for a session.
+                  Documents are optional — upload what you have now. Yellow = not uploaded yet, green = uploaded.
+                  You can submit and book a session even if some files are still missing.
                 </p>
                 <div className="pr-upload-row">
                   <select
@@ -261,10 +260,10 @@ const StudyAbroadDocuments = () => {
                     onChange={(e) => setDocTitle(e.target.value)}
                   >
                     {sections.map((section) => (
-                      <optgroup key={section.title} label={`${section.title} (all required)`}>
+                      <optgroup key={section.title} label={section.title}>
                         {section.docs.map((d) => (
                           <option key={d} value={d}>
-                            {uploaded[d]?.file ? `✓ ${d}` : `${d} *`}
+                            {uploaded[d]?.file ? `✓ ${d}` : d}
                           </option>
                         ))}
                       </optgroup>
@@ -279,7 +278,7 @@ const StudyAbroadDocuments = () => {
                         setFileName(file?.name || '');
                       }}
                     />
-                    {fileName || 'Choose file *'}
+                    {fileName || 'Choose file'}
                   </label>
                   <button type="button" className="pr-add-btn" onClick={handleAddDocument}>
                     <Upload size={16} />
@@ -295,7 +294,7 @@ const StudyAbroadDocuments = () => {
                 <span className="pr-progress-text">
                   {uploadedCount} of {totalCount} uploaded
                   {!allDocsUploaded && (
-                    <span className="pr-progress-missing"> — {missingDocs.length} required remaining</span>
+                    <span className="pr-progress-missing"> — {missingDocs.length} still missing</span>
                   )}
                 </span>
               </div>
@@ -303,20 +302,20 @@ const StudyAbroadDocuments = () => {
               {sections.map((section) => (
                 <div className="pr-card" key={section.title}>
                   <p className="pr-label" style={{ color: '#0d7c3d', textTransform: 'uppercase', letterSpacing: '0.4px', fontSize: 13 }}>
-                    {section.title} — all required *
+                    {section.title} — optional
                   </p>
                   {section.docs.map((doc) => (
                     <div className="pr-check-row" key={doc}>
                       <span className="pr-check-doc-label">
                         <span className={`pr-check-dot ${uploaded[doc]?.file ? 'done' : 'pending'}`} />
-                        <span>{doc} <span className="req">*</span></span>
+                        <span>{doc}</span>
                       </span>
                       {uploaded[doc]?.file ? (
                         <span className="pr-check-ok">
                           <Check size={14} /> {uploaded[doc].fileName}
                         </span>
                       ) : (
-                        <span className="pr-check-pending">Required — not uploaded</span>
+                        <span className="pr-check-pending">Optional — not uploaded</span>
                       )}
                     </div>
                   ))}
@@ -329,15 +328,13 @@ const StudyAbroadDocuments = () => {
             type="button"
             className="pr-submit-btn"
             onClick={handleSubmit}
-            disabled={submitting || !allDocsUploaded}
+            disabled={submitting || !country}
           >
             {submitting
               ? 'Saving...'
-              : allDocsUploaded
-                ? 'Submit documents & continue to booking'
-                : country
-                  ? `Upload all ${totalCount} documents to continue`
-                  : 'Select a country to continue'}
+              : country
+                ? 'Submit & continue to booking'
+                : 'Select a country to continue'}
           </button>
           <p className="pr-secure-note">
             Your documents are reviewed by our team before your paid advisory session. You&apos;ll still

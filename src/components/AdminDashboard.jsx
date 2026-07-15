@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { CountryList, getCountryFlagCode, getFlagImageUrl } from '../utils/countries';
 import CustomSelect from './CustomSelect';
+import { getAllStudyAbroadDocs } from '../data/studyAbroadData';
 
 const BOOKING_STATUS_OPTIONS = [
   { value: 'New', label: 'New' },
@@ -698,11 +699,27 @@ const AdminDashboard = ({ onLogout }) => {
     );
   };
 
+  /** Full checklist for country + any extra titles already on the lead (uploaded or missing). */
+  const getStudentReuploadDocOptions = (lead) => {
+    if (!lead) return [];
+    const checklist = getAllStudyAbroadDocs(lead.country || '') || [];
+    const byTitle = new Map();
+    checklist.forEach((title) => {
+      byTitle.set(title, { title, fileName: '', filePath: '', needsReupload: false });
+    });
+    (lead.uploadedDocuments || []).forEach((doc) => {
+      if (!doc?.title) return;
+      const prev = byTitle.get(doc.title) || { title: doc.title };
+      byTitle.set(doc.title, { ...prev, ...doc });
+    });
+    return Array.from(byTitle.values());
+  };
+
   const handleSendStudentReuploadMail = async (e) => {
     e.preventDefault();
     if (!selectedStudentLead) return;
     if (studentWrongDocs.length === 0) {
-      toast.error('Select at least one incorrect document.');
+      toast.error('Select at least one document to request.');
       return;
     }
 
@@ -3302,7 +3319,7 @@ const AdminDashboard = ({ onLogout }) => {
               <div>
                 <h3>Request document re-upload</h3>
                 <p className="pr-lead-modal-subtitle">
-                  Email <strong>{selectedStudentLead.email}</strong> a secure link for incorrect files
+                  Email <strong>{selectedStudentLead.email}</strong> a secure link to upload or replace selected documents
                 </p>
               </div>
               <button className="admin-modal-close" onClick={closeStudentLeadModal}>✕</button>
@@ -3310,35 +3327,49 @@ const AdminDashboard = ({ onLogout }) => {
             <form onSubmit={handleSendStudentReuploadMail}>
               <div className="admin-modal-body">
                 <p className="student-reupload-help">
-                  Select the documents that are wrong. Student will get a link to re-upload only those files.
-                  When they submit, the database and this admin panel update automatically.
+                  Select any document to request — whether the student already uploaded it or not.
+                  They will get a link to upload only those files. When they submit, this panel updates automatically.
                 </p>
 
-                {(selectedStudentLead.uploadedDocuments || []).length === 0 ? (
-                  <p className="student-reupload-empty">No documents on this lead yet.</p>
-                ) : (
-                  <div className="student-reupload-doc-list">
-                    {selectedStudentLead.uploadedDocuments.map((doc, idx) => {
-                      const checked = studentWrongDocs.includes(doc.title);
-                      return (
-                        <label
-                          key={`${doc.title}-${idx}`}
-                          className={`student-reupload-doc-item${checked ? ' selected' : ''}`}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={checked}
-                            onChange={() => toggleStudentWrongDoc(doc.title)}
-                          />
-                          <span className="student-reupload-doc-text">
-                            <strong>{doc.title}</strong>
-                            {doc.fileName && <small>{doc.fileName}</small>}
-                          </span>
-                        </label>
-                      );
-                    })}
-                  </div>
-                )}
+                {(() => {
+                  const options = getStudentReuploadDocOptions(selectedStudentLead);
+                  if (options.length === 0) {
+                    return (
+                      <p className="student-reupload-empty">
+                        No document checklist found for this country.
+                      </p>
+                    );
+                  }
+                  return (
+                    <div className="student-reupload-doc-list">
+                      {options.map((doc, idx) => {
+                        const checked = studentWrongDocs.includes(doc.title);
+                        const hasFile = Boolean(doc.filePath);
+                        return (
+                          <label
+                            key={`${doc.title}-${idx}`}
+                            className={`student-reupload-doc-item${checked ? ' selected' : ''}`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => toggleStudentWrongDoc(doc.title)}
+                            />
+                            <span className="student-reupload-doc-text">
+                              <strong>{doc.title}</strong>
+                              <small>
+                                {hasFile
+                                  ? `Uploaded${doc.fileName ? `: ${doc.fileName}` : ''}`
+                                  : 'Not uploaded yet'}
+                                {doc.needsReupload ? ' · Re-upload already requested' : ''}
+                              </small>
+                            </span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
 
                 <div className="edit-profile-field" style={{ marginTop: 18 }}>
                   <label htmlFor="student-reupload-note">Note to student (optional)</label>

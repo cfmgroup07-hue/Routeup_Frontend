@@ -63,7 +63,7 @@ const ApplyAustraliaPR = () => {
   const handleAddDocument = () => {
     if (!occupation || !docTitle) return;
     if (!selectedFile) {
-      toast.error('Please choose a file for this document — all documents are required.');
+      toast.error('Please choose a file to add this document.');
       return;
     }
     if (selectedFile.size > MAX_FILE_BYTES) {
@@ -88,14 +88,10 @@ const ApplyAustraliaPR = () => {
       toast.error('Please select your occupation first.');
       return;
     }
-    if (!allDocsUploaded) {
-      toast.error(
-        `All documents are required for interview consideration. Missing: ${missingDocs.slice(0, 3).join(', ')}${missingDocs.length > 3 ? ` +${missingDocs.length - 3} more` : ''}`
-      );
-      return;
-    }
 
-    const files = Object.values(uploaded).map((info) => info.file).filter(Boolean);
+    const files = allDocs
+      .filter((title) => uploaded[title]?.file)
+      .map((title) => uploaded[title].file);
     const totalSize = files.reduce((sum, file) => sum + (file.size || 0), 0);
     if (totalSize > MAX_TOTAL_BYTES) {
       toast.error('Total upload size must be under 100MB. Please compress larger files.');
@@ -117,16 +113,18 @@ const ApplyAustraliaPR = () => {
       formData.append('country', origin === 'offshore' ? country : '');
       formData.append('state', origin === 'onshore' ? state : '');
 
-      const meta = Object.entries(uploaded).map(([title, info]) => ({
-        title,
-        fileName: info.fileName || '',
-        attached: Boolean(info.file),
-      }));
+      // Include full checklist so admin can see uploaded + missing titles
+      const meta = allDocs.map((title) => {
+        const info = uploaded[title];
+        return {
+          title,
+          fileName: info?.fileName || '',
+          attached: Boolean(info?.file),
+        };
+      });
       formData.append('documentMeta', JSON.stringify(meta));
 
-      Object.values(uploaded).forEach((info) => {
-        if (info.file) formData.append('documents', info.file);
-      });
+      files.forEach((file) => formData.append('documents', file));
 
       const res = await fetch(`${API_URL}/api/pr-leads`, {
         method: 'POST',
@@ -260,11 +258,10 @@ const ApplyAustraliaPR = () => {
           {occupation && (
             <>
               <div className="pr-card">
-                <p className="pr-label">
-                  Upload a document <span className="req">*</span>
-                </p>
+                <p className="pr-label">Upload a document</p>
                 <p className="pr-upload-required-note">
-                  Every document listed below is required. Incomplete uploads will not be considered for an interview.
+                  Documents are optional — upload what you have now. Yellow = not uploaded yet, green = uploaded.
+                  You can submit even if some files are still missing.
                 </p>
                 <div className="pr-upload-row">
                   <select
@@ -272,17 +269,17 @@ const ApplyAustraliaPR = () => {
                     value={docTitle}
                     onChange={(e) => setDocTitle(e.target.value)}
                   >
-                    <optgroup label="Standard documents (all required)">
+                    <optgroup label="Standard documents (optional)">
                       {UNIVERSAL_DOCS.map((d) => (
                         <option key={d} value={d}>
-                          {uploaded[d]?.file ? `✓ ${d}` : `${d} *`}
+                          {uploaded[d]?.file ? `✓ ${d}` : d}
                         </option>
                       ))}
                     </optgroup>
-                    <optgroup label={`${occupation.body} checklist (all required)`}>
+                    <optgroup label={`${occupation.body} checklist (optional)`}>
                       {occupation.docs.map((d) => (
                         <option key={d} value={d}>
-                          {uploaded[d]?.file ? `✓ ${d}` : `${d} *`}
+                          {uploaded[d]?.file ? `✓ ${d}` : d}
                         </option>
                       ))}
                     </optgroup>
@@ -296,7 +293,7 @@ const ApplyAustraliaPR = () => {
                         setFileName(file?.name || '');
                       }}
                     />
-                    {fileName || 'Choose file *'}
+                    {fileName || 'Choose file'}
                   </label>
                   <button type="button" className="pr-add-btn" onClick={handleAddDocument}>
                     <Upload size={16} />
@@ -312,25 +309,25 @@ const ApplyAustraliaPR = () => {
                 <span className="pr-progress-text">
                   {uploadedCount} of {totalCount} uploaded
                   {!allDocsUploaded && (
-                    <span className="pr-progress-missing"> — {missingDocs.length} required remaining</span>
+                    <span className="pr-progress-missing"> — {missingDocs.length} still missing</span>
                   )}
                 </span>
               </div>
 
               <div className="pr-card">
-                <p className="pr-label">Standard documents (all applicants) — all required *</p>
+                <p className="pr-label">Standard documents (all applicants) — optional</p>
                 {UNIVERSAL_DOCS.map((doc) => (
                   <div className="pr-check-row" key={doc}>
                     <span className="pr-check-doc-label">
                       <span className={`pr-check-dot ${uploaded[doc]?.file ? 'done' : 'pending'}`} />
-                      <span>{doc} <span className="req">*</span></span>
+                      <span>{doc}</span>
                     </span>
                     {uploaded[doc]?.file ? (
                       <span className="pr-check-ok">
                         <Check size={14} /> {uploaded[doc].fileName}
                       </span>
                     ) : (
-                      <span className="pr-check-pending">Required — not uploaded</span>
+                      <span className="pr-check-pending">Optional — not uploaded</span>
                     )}
                   </div>
                 ))}
@@ -338,20 +335,20 @@ const ApplyAustraliaPR = () => {
 
               <div className="pr-card">
                 <p className="pr-label">
-                  {occupation.body} checklist — {occupation.name} — all required *
+                  {occupation.body} checklist — {occupation.name} — optional
                 </p>
                 {occupation.docs.map((doc) => (
                   <div className="pr-check-row" key={doc}>
                     <span className="pr-check-doc-label">
                       <span className={`pr-check-dot ${uploaded[doc]?.file ? 'done' : 'pending'}`} />
-                      <span>{doc} <span className="req">*</span></span>
+                      <span>{doc}</span>
                     </span>
                     {uploaded[doc]?.file ? (
                       <span className="pr-check-ok">
                         <Check size={14} /> {uploaded[doc].fileName}
                       </span>
                     ) : (
-                      <span className="pr-check-pending">Required — not uploaded</span>
+                      <span className="pr-check-pending">Optional — not uploaded</span>
                     )}
                   </div>
                 ))}
@@ -400,13 +397,9 @@ const ApplyAustraliaPR = () => {
                   type="button"
                   className="pr-submit-btn"
                   onClick={handleLeadSubmit}
-                  disabled={submitting || !allDocsUploaded}
+                  disabled={submitting}
                 >
-                  {submitting
-                    ? 'Saving...'
-                    : allDocsUploaded
-                      ? 'Book a Visa & Migration session'
-                      : `Upload all ${totalCount} documents to continue`}
+                  {submitting ? 'Saving...' : 'Book a Visa & Migration session'}
                 </button>
                 <p className="pr-secure-note">
                   After you submit, our team will connect with you within 24 hours.

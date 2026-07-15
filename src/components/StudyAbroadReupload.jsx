@@ -93,7 +93,7 @@ const StudyAbroadReupload = () => {
           Re-upload your <span className="green">documents</span>
         </h1>
         <p>
-          Our team asked for a corrected copy of specific files. Upload them below — your application
+          Our team asked you to upload specific files. Upload them below — your application
           will update automatically.
         </p>
       </section>
@@ -152,19 +152,25 @@ const StudyAbroadReupload = () => {
               </div>
 
               <div className="pr-card">
-                <h3 className="pr-card-title">Documents to re-upload *</h3>
-                {info.documents.map((doc) => (
+                <h3 className="pr-card-title">Documents requested *</h3>
+                {info.documents.map((doc) => {
+                  const chosen = files[doc.title];
+                  return (
                   <div className="pr-check-row" key={doc.title} style={{ flexDirection: 'column', alignItems: 'stretch', gap: 10 }}>
                     <div className="pr-check-doc-label">
-                      <span className="pr-check-dot pending" />
+                      <span className={`pr-check-dot ${chosen ? 'done' : 'pending'}`} />
                       <span>
                         <strong>{doc.title}</strong>
                         {doc.reuploadNote && (
                           <div style={{ fontSize: 12, color: '#a16207', marginTop: 4 }}>{doc.reuploadNote}</div>
                         )}
-                        {doc.currentFileName && (
+                        {doc.currentFileName ? (
                           <div style={{ fontSize: 12, color: '#94a3b8', marginTop: 2 }}>
                             Previous: {doc.currentFileName}
+                          </div>
+                        ) : (
+                          <div style={{ fontSize: 12, color: '#a16207', marginTop: 2 }}>
+                            Not uploaded yet — please upload now
                           </div>
                         )}
                       </span>
@@ -177,10 +183,11 @@ const StudyAbroadReupload = () => {
                           setFiles((prev) => ({ ...prev, [doc.title]: file }));
                         }}
                       />
-                      {files[doc.title]?.name || 'Choose new file *'}
+                      {chosen?.name || (doc.currentFileName ? 'Choose new file *' : 'Choose file *')}
                     </label>
                   </div>
-                ))}
+                  );
+                })}
               </div>
 
               <button
