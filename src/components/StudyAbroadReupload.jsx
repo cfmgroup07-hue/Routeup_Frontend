@@ -129,10 +129,9 @@ const StudyAbroadReupload = () => {
               >
                 <Check size={32} />
               </div>
-              <h3 className="pr-card-title" style={{ fontSize: 22 }}>Documents updated</h3>
+              <h3 className="pr-card-title" style={{ fontSize: 22 }}>Thanks for uploading!</h3>
               <p style={{ color: '#64748b', lineHeight: 1.7, maxWidth: 480, margin: '0 auto 20px' }}>
-                Thank you{info?.name ? `, ${info.name}` : ''}. Your files are now updated in our system
-                and our team can continue reviewing your application.
+                Thank you{info?.name ? `, ${info.name}` : ''}. Your files have been successfully uploaded and updated in our system, and our team will continue reviewing your application.
               </p>
               <Link to="/" className="pr-submit-btn" style={{ display: 'inline-block', textDecoration: 'none', maxWidth: 240 }}>
                 Back to Home

@@ -81,6 +81,9 @@ const AdminDashboard = ({ onLogout }) => {
   };
   const [selectedBooking, setSelectedBooking] = useState(null);
   const [socketNotification, setSocketNotification] = useState(null);
+  const [notifications, setNotifications] = useState([]);
+  const [showNotifDropdown, setShowNotifDropdown] = useState(false);
+  const notifDropdownRef = useRef(null);
   
   // Search & Filter state
   const [searchTerm, setSearchTerm] = useState('');
@@ -615,6 +618,67 @@ const AdminDashboard = ({ onLogout }) => {
     }
   };
 
+  const fetchNotifications = async () => {
+    const token = localStorage.getItem('adminToken');
+    if (!token) return;
+    try {
+      const response = await fetch(`${API_URL}/api/notifications`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setNotifications(data);
+      } else if (response.status === 401) {
+        handleUnauthorized();
+      }
+    } catch (error) {
+      console.error('Failed to fetch notifications:', error);
+    }
+  };
+
+  const markNotificationRead = async (id) => {
+    const token = localStorage.getItem('adminToken');
+    if (!token) return;
+    try {
+      const response = await fetch(`${API_URL}/api/notifications/mark-read`, {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ id }),
+      });
+      if (response.ok) {
+        if (id) {
+          setNotifications((prev) =>
+            prev.map((n) => (n._id === id ? { ...n, isRead: true } : n))
+          );
+        } else {
+          setNotifications((prev) => prev.map((n) => ({ ...n, isRead: true })));
+        }
+      }
+    } catch (error) {
+      console.error('Failed to mark notifications read:', error);
+    }
+  };
+
+  const clearAllNotifications = async () => {
+    if (!window.confirm('Clear all notifications?')) return;
+    const token = localStorage.getItem('adminToken');
+    if (!token) return;
+    try {
+      const response = await fetch(`${API_URL}/api/notifications`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (response.ok) {
+        setNotifications([]);
+      }
+    } catch (error) {
+      console.error('Failed to clear notifications:', error);
+    }
+  };
+
   const handleDeleteStudentLead = async (id) => {
     if (!window.confirm('Delete this student lead?')) return;
     const token = localStorage.getItem('adminToken');
@@ -634,6 +698,62 @@ const AdminDashboard = ({ onLogout }) => {
       }
     } catch {
       toast.error('Error deleting lead');
+    }
+  };
+
+  const handleDeleteStudentDocument = async (title) => {
+    if (!window.confirm(`Are you sure you want to delete the document "${title}"?`)) return;
+    if (!selectedStudentLead) return;
+    const token = localStorage.getItem('adminToken');
+    try {
+      const response = await fetch(`${API_URL}/api/study-abroad-leads/${selectedStudentLead._id}/document`, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ title }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (response.ok) {
+        toast.success('Document deleted successfully');
+        if (data.lead) {
+          setStudentLeads((prev) => prev.map((l) => (l._id === data.lead._id ? data.lead : l)));
+          setSelectedStudentLead(data.lead);
+        }
+      } else {
+        toast.error(data.message || 'Failed to delete document');
+      }
+    } catch {
+      toast.error('Error deleting document');
+    }
+  };
+
+  const handleDeletePrDocument = async (title) => {
+    if (!window.confirm(`Are you sure you want to delete the document "${title}"?`)) return;
+    if (!selectedPrLead) return;
+    const token = localStorage.getItem('adminToken');
+    try {
+      const response = await fetch(`${API_URL}/api/pr-leads/${selectedPrLead._id}/document`, {
+        method: 'DELETE',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ title }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (response.ok) {
+        toast.success('Document deleted successfully');
+        if (data.lead) {
+          setPrLeads((prev) => prev.map((l) => (l._id === data.lead._id ? data.lead : l)));
+          setSelectedPrLead(data.lead);
+        }
+      } else {
+        toast.error(data.message || 'Failed to delete document');
+      }
+    } catch {
+      toast.error('Error deleting document');
     }
   };
 
@@ -1029,6 +1149,7 @@ const AdminDashboard = ({ onLogout }) => {
     fetchVisaPathwaysList();
     fetchPrLeads();
     fetchStudentLeads();
+    fetchNotifications();
 
     // Socket.io Connection
     const socket = io(`${SOCKET_URL}`);
@@ -1112,8 +1233,25 @@ const AdminDashboard = ({ onLogout }) => {
       setTimeout(() => setSocketNotification(null), 8000);
     });
 
+    socket.on('new_notification', (newNotif) => {
+      console.log('Socket new_notification:', newNotif);
+      setNotifications((prev) => [newNotif, ...prev]);
+    });
+
     return () => {
       socket.disconnect();
+    };
+  }, []);
+
+  useEffect(() => {
+    const handleOutsideClick = (e) => {
+      if (notifDropdownRef.current && !notifDropdownRef.current.contains(e.target)) {
+        setShowNotifDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutsideClick);
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideClick);
     };
   }, []);
 
@@ -1538,6 +1676,76 @@ const AdminDashboard = ({ onLogout }) => {
             {activeTab === 'australia-pr' && 'Australia PR Leads'}
             {activeTab === 'students' && 'Students — Study Abroad'}
           </h2>
+
+          <div className="admin-notifications-container" ref={notifDropdownRef}>
+            <button
+              type="button"
+              className="admin-notif-bell-btn"
+              onClick={() => setShowNotifDropdown(!showNotifDropdown)}
+            >
+              <Bell size={20} />
+              {notifications.filter((n) => !n.isRead).length > 0 && (
+                <span className="admin-notif-badge">
+                  {notifications.filter((n) => !n.isRead).length}
+                </span>
+              )}
+            </button>
+
+            {showNotifDropdown && (
+              <div className="admin-notif-dropdown">
+                <div className="admin-notif-header">
+                  <h3>Notifications</h3>
+                  {notifications.length > 0 && (
+                    <div className="admin-notif-header-actions">
+                      <button type="button" onClick={() => markNotificationRead(null)}>
+                        Mark all read
+                      </button>
+                      <button type="button" onClick={clearAllNotifications} className="clear-btn">
+                        Clear all
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                <div className="admin-notif-list">
+                  {notifications.length === 0 ? (
+                    <div className="admin-notif-empty">No notifications yet</div>
+                  ) : (
+                    notifications.map((notif) => (
+                      <div
+                        key={notif._id}
+                        className={`admin-notif-item ${notif.isRead ? 'read' : 'unread'}`}
+                        onClick={() => {
+                          markNotificationRead(notif._id);
+                          if (notif.link) {
+                            setActiveTab(notif.link);
+                          }
+                          setShowNotifDropdown(false);
+                        }}
+                      >
+                        <div className="admin-notif-item-header">
+                          <span className="admin-notif-item-title">{notif.title}</span>
+                          {!notif.isRead && <span className="admin-notif-unread-dot" />}
+                        </div>
+                        <p className="admin-notif-item-msg">{notif.message}</p>
+                        <span className="admin-notif-item-time">
+                          {new Date(notif.createdAt).toLocaleTimeString([], {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })}{' '}
+                          ·{' '}
+                          {new Date(notif.createdAt).toLocaleDateString([], {
+                            month: 'short',
+                            day: 'numeric',
+                          })}
+                        </span>
+                      </div>
+                    ))
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
         </header>
 
         {/* LIVE SOCKET TOAST NOTIFICATION */}
@@ -2445,6 +2653,13 @@ const AdminDashboard = ({ onLogout }) => {
                               onClick={() => handlePrDocDownload(doc)}
                             >
                               <Download size={13} /> Download
+                            </button>
+                            <button
+                              type="button"
+                              className="pr-doc-btn delete"
+                              onClick={() => handleDeletePrDocument(doc.title)}
+                            >
+                              <Trash2 size={13} /> Delete
                             </button>
                           </div>
                         ) : (
@@ -3414,6 +3629,13 @@ const AdminDashboard = ({ onLogout }) => {
                               onClick={() => handleStudentDocDownload(doc)}
                             >
                               <Download size={13} /> Download
+                            </button>
+                            <button
+                              type="button"
+                              className="pr-doc-btn delete"
+                              onClick={() => handleDeleteStudentDocument(doc.title)}
+                            >
+                              <Trash2 size={13} /> Delete
                             </button>
                           </div>
                         ) : (
