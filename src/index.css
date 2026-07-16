@@ -1814,6 +1814,31 @@ h1, h2, h3, h4, h5, h6 {
   padding: 0 8px;
 }
 
+.admin-sidebar-user-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.admin-sidebar-user-name {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #0f172a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.admin-sidebar-user-email {
+  font-size: 11.5px;
+  font-weight: 500;
+  color: #94a3b8;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .admin-sidebar-user-avatar {
   width: 36px;
   height: 36px;
@@ -1824,12 +1849,21 @@ h1, h2, h3, h4, h5, h6 {
   justify-content: center;
   font-weight: 700;
   color: #0f172a;
+  flex-shrink: 0;
+  overflow: hidden;
 }
 
+.admin-sidebar-user-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.admin-sidebar-settings-btn,
 .admin-sidebar-logout-btn {
   background: none;
   border: 1px solid #e2e8f0;
-  color: #ef4444;
   padding: 10px 16px;
   border-radius: 8px;
   font-size: 13.5px;
@@ -1842,9 +1876,141 @@ h1, h2, h3, h4, h5, h6 {
   gap: 8px;
 }
 
+.admin-sidebar-settings-btn {
+  color: #334155;
+}
+
+.admin-sidebar-settings-btn:hover {
+  background: rgba(13, 124, 61, 0.06);
+  border-color: rgba(13, 124, 61, 0.25);
+  color: #0d7c3d;
+}
+
+.admin-sidebar-logout-btn {
+  color: #ef4444;
+}
+
 .admin-sidebar-logout-btn:hover {
   background: rgba(239, 68, 68, 0.05);
   border-color: rgba(239, 68, 68, 0.2);
+}
+
+.admin-settings-modal {
+  max-width: 480px;
+}
+
+.admin-settings-tabs {
+  display: flex;
+  gap: 8px;
+  padding: 0 24px;
+  margin-top: 4px;
+}
+
+.admin-settings-tab {
+  flex: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  border-radius: 8px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #64748b;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.admin-settings-tab:hover {
+  border-color: #cbd5e1;
+  color: #334155;
+}
+
+.admin-settings-tab.active {
+  background: rgba(13, 124, 61, 0.08);
+  border-color: rgba(13, 124, 61, 0.35);
+  color: #0d7c3d;
+}
+
+.admin-avatar-upload {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 20px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.admin-avatar-preview {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  background: #e2e8f0;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  font-weight: 700;
+  color: #0f172a;
+  flex-shrink: 0;
+  border: 2px solid #e2e8f0;
+}
+
+.admin-avatar-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.admin-avatar-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
+}
+
+.admin-avatar-pick-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  border: 1px solid rgba(13, 124, 61, 0.3);
+  background: rgba(13, 124, 61, 0.08);
+  color: #0d7c3d;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.admin-avatar-pick-btn:hover {
+  background: rgba(13, 124, 61, 0.14);
+}
+
+.admin-avatar-remove-btn {
+  background: none;
+  border: none;
+  color: #ef4444;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+}
+
+.admin-avatar-remove-btn:hover {
+  text-decoration: underline;
+}
+
+.admin-avatar-hint {
+  margin: 0;
+  font-size: 11.5px;
+  color: #94a3b8;
 }
 
 .admin-main-content {
@@ -3276,7 +3442,8 @@ h1, h2, h3, h4, h5, h6 {
 }
 .admin-sidebar.collapsed .admin-sidebar-badge,
 .admin-sidebar.collapsed .nav-label,
-.admin-sidebar.collapsed .admin-sidebar-user span,
+.admin-sidebar.collapsed .admin-sidebar-user-meta,
+.admin-sidebar.collapsed .admin-sidebar-settings-btn span,
 .admin-sidebar.collapsed .admin-sidebar-logout-btn span {
   display: none;
 }
@@ -3296,9 +3463,11 @@ h1, h2, h3, h4, h5, h6 {
 .admin-sidebar.collapsed .admin-sidebar-user-avatar {
   margin-right: 0;
 }
+.admin-sidebar.collapsed .admin-sidebar-settings-btn,
 .admin-sidebar.collapsed .admin-sidebar-logout-btn {
   justify-content: center;
 }
+.admin-sidebar.collapsed .admin-sidebar-settings-btn svg,
 .admin-sidebar.collapsed .admin-sidebar-logout-btn svg {
   margin-right: 0;
 }

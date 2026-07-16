@@ -428,8 +428,10 @@ const LandingPage = ({ onAdminClick }) => {
               submissionData.append('careerIndustry', formData.careerIndustry);
               submissionData.append('careerJobTitle', formData.careerJobTitle);
             }
-            if (selectedServices.visa) {
+            if (selectedServices.visa || selectedServices.education) {
               submissionData.append('preferredCountry', formData.preferredCountry);
+            }
+            if (selectedServices.visa) {
               submissionData.append('passport', formData.passport);
               submissionData.append('overseasExp', formData.overseasExp);
             }
@@ -1106,6 +1108,25 @@ const LandingPage = ({ onAdminClick }) => {
                         onChange={handleInputChange} 
                         options={EXP_OPTIONS} 
                         placeholder="Type or select experience" 
+                      />
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Education details */}
+              {selectedServices.education && !selectedServices.visa && (
+                <div className="conditional-service-fields">
+                  <h4><GraduationCap size={18} /> Education & Study Abroad Details</h4>
+                  <div className="form-row">
+                    <div className="form-group">
+                      <label htmlFor="preferredCountry">Preferred Country</label>
+                      <AutocompleteInput 
+                        id="preferredCountry" 
+                        value={formData.preferredCountry} 
+                        onChange={handleInputChange} 
+                        options={COUNTRY_OPTIONS} 
+                        placeholder="Type or select country" 
                       />
                     </div>
                   </div>

@@ -31,6 +31,9 @@ const AdminLogin = ({ onLoginSuccess }) => {
       // Store credentials in localStorage
       localStorage.setItem('adminToken', data.token);
       localStorage.setItem('adminEmail', data.email);
+      localStorage.setItem('adminName', data.name || 'Admin');
+      if (data.avatar) localStorage.setItem('adminAvatar', data.avatar);
+      else localStorage.removeItem('adminAvatar');
       
       onLoginSuccess();
     } catch (err) {

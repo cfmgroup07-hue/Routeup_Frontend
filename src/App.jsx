@@ -28,6 +28,8 @@ const AdminRoute = () => {
   const handleLogout = () => {
     localStorage.removeItem('adminToken');
     localStorage.removeItem('adminEmail');
+    localStorage.removeItem('adminName');
+    localStorage.removeItem('adminAvatar');
     setIsAuthenticated(false);
     window.location.href = '/';
   };

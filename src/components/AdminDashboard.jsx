@@ -7,7 +7,8 @@ import {
   Filter, LogOut, ArrowRight, Download, Calendar, 
   MapPin, GraduationCap, Briefcase, FileText, Bell,
   Plus, Edit, Trash2, Globe, FileCheck, Eye, Video, UploadCloud,
-  Target, Award, Plane, BookOpen, Compass, ChevronLeft, ChevronRight, Mail, Send
+  Target, Award, Plane, BookOpen, Compass, ChevronLeft, ChevronRight, Mail, Send,
+  Settings, User, Lock, Camera
 } from 'lucide-react';
 import { CountryList, getCountryFlagCode, getFlagImageUrl } from '../utils/countries';
 import CustomSelect from './CustomSelect';
@@ -73,6 +74,8 @@ const AdminDashboard = ({ onLogout }) => {
   const handleUnauthorized = () => {
     localStorage.removeItem('adminToken');
     localStorage.removeItem('adminEmail');
+    localStorage.removeItem('adminName');
+    localStorage.removeItem('adminAvatar');
     toast.error('Session expired. Please log in again.');
     onLogout();
   };
@@ -117,6 +120,26 @@ const AdminDashboard = ({ onLogout }) => {
   const [studentMailMessage, setStudentMailMessage] = useState('');
   const [studentWrongDocs, setStudentWrongDocs] = useState([]);
   const [studentMailSending, setStudentMailSending] = useState(false);
+
+  // Admin profile / settings
+  const [adminProfile, setAdminProfile] = useState({
+    name: localStorage.getItem('adminName') || 'Admin',
+    email: localStorage.getItem('adminEmail') || '',
+    avatar: localStorage.getItem('adminAvatar') || '',
+  });
+  const [showAdminSettings, setShowAdminSettings] = useState(false);
+  const [adminSettingsTab, setAdminSettingsTab] = useState('profile'); // 'profile' | 'password'
+  const [profileForm, setProfileForm] = useState({ name: '', email: '' });
+  const [avatarFile, setAvatarFile] = useState(null);
+  const [avatarPreview, setAvatarPreview] = useState('');
+  const [removeAvatar, setRemoveAvatar] = useState(false);
+  const [passwordForm, setPasswordForm] = useState({
+    currentPassword: '',
+    newPassword: '',
+    confirmPassword: '',
+  });
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [passwordSaving, setPasswordSaving] = useState(false);
 
   // Pagination State
   const [currentPage, setCurrentPage] = useState(1);
@@ -772,6 +795,208 @@ const AdminDashboard = ({ onLogout }) => {
     }
   };
 
+  const syncAdminProfileLocal = (next) => {
+    setAdminProfile(next);
+    localStorage.setItem('adminName', next.name || 'Admin');
+    localStorage.setItem('adminEmail', next.email || '');
+    if (next.avatar) localStorage.setItem('adminAvatar', next.avatar);
+    else localStorage.removeItem('adminAvatar');
+  };
+
+  useEffect(() => {
+    const loadAdminProfile = async () => {
+      const token = localStorage.getItem('adminToken');
+      if (!token) return;
+      try {
+        const res = await fetch(`${API_URL}/api/auth/me`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        if (!res.ok) return;
+        const data = await res.json();
+        syncAdminProfileLocal({
+          name: data.name || 'Admin',
+          email: data.email || '',
+          avatar: data.avatar || '',
+        });
+      } catch {
+        /* keep cached values */
+      }
+    };
+    loadAdminProfile();
+  }, []);
+
+  const openAdminSettings = async () => {
+    setAdminSettingsTab('profile');
+    setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+    setAvatarFile(null);
+    setRemoveAvatar(false);
+    setShowAdminSettings(true);
+
+    const token = localStorage.getItem('adminToken');
+    try {
+      const res = await fetch(`${API_URL}/api/auth/me`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (res.status === 401) {
+        handleUnauthorized();
+        return;
+      }
+      if (res.ok) {
+        const data = await res.json();
+        const next = {
+          name: data.name || 'Admin',
+          email: data.email || '',
+          avatar: data.avatar || '',
+        };
+        syncAdminProfileLocal(next);
+        setProfileForm({ name: next.name, email: next.email });
+        setAvatarPreview(next.avatar ? `${API_URL}${next.avatar}` : '');
+        return;
+      }
+    } catch {
+      /* fall through to cached values */
+    }
+    setProfileForm({
+      name: adminProfile.name || 'Admin',
+      email: adminProfile.email || '',
+    });
+    setAvatarPreview(adminProfile.avatar ? `${API_URL}${adminProfile.avatar}` : '');
+  };
+
+  const closeAdminSettings = () => {
+    setShowAdminSettings(false);
+    setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+    setAvatarFile(null);
+    setAvatarPreview('');
+    setRemoveAvatar(false);
+    setProfileSaving(false);
+    setPasswordSaving(false);
+  };
+
+  const handleAvatarPick = (e) => {
+    const file = e.target.files?.[0] || null;
+    e.target.value = '';
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      toast.error('Please choose an image file');
+      return;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Profile photo must be under 5MB');
+      return;
+    }
+    setAvatarFile(file);
+    setRemoveAvatar(false);
+    setAvatarPreview(URL.createObjectURL(file));
+  };
+
+  const handleRemoveAvatar = () => {
+    setAvatarFile(null);
+    setAvatarPreview('');
+    setRemoveAvatar(true);
+  };
+
+  const handleSaveAdminProfile = async (e) => {
+    e.preventDefault();
+    if (!profileForm.name.trim()) {
+      toast.error('Name is required');
+      return;
+    }
+    if (!profileForm.email.trim() || !profileForm.email.includes('@')) {
+      toast.error('Please enter a valid email');
+      return;
+    }
+
+    const token = localStorage.getItem('adminToken');
+    setProfileSaving(true);
+    try {
+      const formData = new FormData();
+      formData.append('name', profileForm.name.trim());
+      formData.append('email', profileForm.email.trim().toLowerCase());
+      if (avatarFile) formData.append('avatar', avatarFile);
+      if (removeAvatar) formData.append('removeAvatar', 'true');
+
+      const res = await fetch(`${API_URL}/api/auth/profile`, {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bearer ${token}`,
+        },
+        body: formData,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 401) {
+        handleUnauthorized();
+        return;
+      }
+      if (!res.ok) {
+        toast.error(data.message || 'Failed to update profile');
+        return;
+      }
+      const next = {
+        name: data.name || profileForm.name,
+        email: data.email || profileForm.email,
+        avatar: data.avatar || '',
+      };
+      syncAdminProfileLocal(next);
+      setProfileForm({ name: next.name, email: next.email });
+      setAvatarFile(null);
+      setRemoveAvatar(false);
+      setAvatarPreview(next.avatar ? `${API_URL}${next.avatar}` : '');
+      toast.success('Profile updated');
+    } catch {
+      toast.error('Error updating profile');
+    } finally {
+      setProfileSaving(false);
+    }
+  };
+
+  const handleChangeAdminPassword = async (e) => {
+    e.preventDefault();
+    if (!passwordForm.currentPassword || !passwordForm.newPassword) {
+      toast.error('Please fill in all password fields');
+      return;
+    }
+    if (passwordForm.newPassword.length < 6) {
+      toast.error('New password must be at least 6 characters');
+      return;
+    }
+    if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+      toast.error('New passwords do not match');
+      return;
+    }
+
+    const token = localStorage.getItem('adminToken');
+    setPasswordSaving(true);
+    try {
+      const res = await fetch(`${API_URL}/api/auth/password`, {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          currentPassword: passwordForm.currentPassword,
+          newPassword: passwordForm.newPassword,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (res.status === 401 && data.message !== 'Current password is incorrect') {
+        handleUnauthorized();
+        return;
+      }
+      if (!res.ok) {
+        toast.error(data.message || 'Failed to change password');
+        return;
+      }
+      setPasswordForm({ currentPassword: '', newPassword: '', confirmPassword: '' });
+      toast.success('Password changed successfully');
+    } catch {
+      toast.error('Error changing password');
+    } finally {
+      setPasswordSaving(false);
+    }
+  };
+
   // Fetch Services List
   const fetchServicesList = async () => {
     try {
@@ -1279,9 +1504,22 @@ const AdminDashboard = ({ onLogout }) => {
 
         <div className="admin-sidebar-footer">
           <div className="admin-sidebar-user">
-            <div className="admin-sidebar-user-avatar">A</div>
-            <span>{localStorage.getItem('adminEmail') || 'Admin'}</span>
+            <div className="admin-sidebar-user-avatar">
+              {adminProfile.avatar ? (
+                <img src={`${API_URL}${adminProfile.avatar}`} alt="" />
+              ) : (
+                (adminProfile.name || adminProfile.email || 'A').charAt(0).toUpperCase()
+              )}
+            </div>
+            <div className="admin-sidebar-user-meta">
+              <span className="admin-sidebar-user-name">{adminProfile.name || 'Admin'}</span>
+              <span className="admin-sidebar-user-email">{adminProfile.email || '—'}</span>
+            </div>
           </div>
+          <button type="button" className="admin-sidebar-settings-btn" onClick={openAdminSettings}>
+            <Settings size={16} style={{ flexShrink: 0 }} />
+            <span>Settings</span>
+          </button>
           <button className="admin-sidebar-logout-btn" onClick={onLogout}>
             <LogOut size={16} style={{ flexShrink: 0 }} />
             <span>Logout</span>
@@ -3395,6 +3633,181 @@ const AdminDashboard = ({ onLogout }) => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {showAdminSettings && (
+        <div className="admin-modal-overlay" onClick={closeAdminSettings}>
+          <div
+            className="admin-modal edit-profile-modal admin-settings-modal"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="admin-modal-header">
+              <div>
+                <h3>Account settings</h3>
+                <p className="pr-lead-modal-subtitle">
+                  Update your profile details or change your password
+                </p>
+              </div>
+              <button type="button" className="admin-modal-close" onClick={closeAdminSettings}>
+                ✕
+              </button>
+            </div>
+
+            <div className="admin-settings-tabs">
+              <button
+                type="button"
+                className={`admin-settings-tab${adminSettingsTab === 'profile' ? ' active' : ''}`}
+                onClick={() => setAdminSettingsTab('profile')}
+              >
+                <User size={16} />
+                Profile
+              </button>
+              <button
+                type="button"
+                className={`admin-settings-tab${adminSettingsTab === 'password' ? ' active' : ''}`}
+                onClick={() => setAdminSettingsTab('password')}
+              >
+                <Lock size={16} />
+                Password
+              </button>
+            </div>
+
+            {adminSettingsTab === 'profile' ? (
+              <form onSubmit={handleSaveAdminProfile}>
+                <div className="admin-modal-body">
+                  <div className="admin-avatar-upload">
+                    <div className="admin-avatar-preview">
+                      {avatarPreview ? (
+                        <img src={avatarPreview} alt="Profile" />
+                      ) : (
+                        <span>
+                          {(profileForm.name || profileForm.email || 'A').charAt(0).toUpperCase()}
+                        </span>
+                      )}
+                    </div>
+                    <div className="admin-avatar-actions">
+                      <label className="admin-avatar-pick-btn">
+                        <Camera size={15} />
+                        {avatarPreview ? 'Change photo' : 'Upload photo'}
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/png,image/webp,image/gif"
+                          onChange={handleAvatarPick}
+                          hidden
+                        />
+                      </label>
+                      {avatarPreview && (
+                        <button
+                          type="button"
+                          className="admin-avatar-remove-btn"
+                          onClick={handleRemoveAvatar}
+                        >
+                          Remove
+                        </button>
+                      )}
+                      <p className="admin-avatar-hint">JPG, PNG, WEBP or GIF · max 5MB</p>
+                    </div>
+                  </div>
+                  <div className="edit-profile-field">
+                    <label htmlFor="admin-profile-name">Display name</label>
+                    <input
+                      id="admin-profile-name"
+                      type="text"
+                      value={profileForm.name}
+                      onChange={(e) =>
+                        setProfileForm((prev) => ({ ...prev, name: e.target.value }))
+                      }
+                      placeholder="Your name"
+                      required
+                    />
+                  </div>
+                  <div className="edit-profile-field" style={{ marginTop: 14 }}>
+                    <label htmlFor="admin-profile-email">Email address</label>
+                    <input
+                      id="admin-profile-email"
+                      type="email"
+                      value={profileForm.email}
+                      onChange={(e) =>
+                        setProfileForm((prev) => ({ ...prev, email: e.target.value }))
+                      }
+                      placeholder="admin@example.com"
+                      required
+                    />
+                  </div>
+                </div>
+                <div className="edit-profile-footer">
+                  <button type="button" className="edit-profile-cancel-btn" onClick={closeAdminSettings}>
+                    Cancel
+                  </button>
+                  <button type="submit" className="edit-profile-save-btn" disabled={profileSaving}>
+                    {profileSaving ? 'Saving...' : 'Save profile'}
+                  </button>
+                </div>
+              </form>
+            ) : (
+              <form onSubmit={handleChangeAdminPassword}>
+                <div className="admin-modal-body">
+                  <div className="edit-profile-field">
+                    <label htmlFor="admin-current-password">Current password</label>
+                    <input
+                      id="admin-current-password"
+                      type="password"
+                      value={passwordForm.currentPassword}
+                      onChange={(e) =>
+                        setPasswordForm((prev) => ({
+                          ...prev,
+                          currentPassword: e.target.value,
+                        }))
+                      }
+                      placeholder="Enter current password"
+                      required
+                      autoComplete="current-password"
+                    />
+                  </div>
+                  <div className="edit-profile-field" style={{ marginTop: 14 }}>
+                    <label htmlFor="admin-new-password">New password</label>
+                    <input
+                      id="admin-new-password"
+                      type="password"
+                      value={passwordForm.newPassword}
+                      onChange={(e) =>
+                        setPasswordForm((prev) => ({ ...prev, newPassword: e.target.value }))
+                      }
+                      placeholder="At least 6 characters"
+                      required
+                      autoComplete="new-password"
+                    />
+                  </div>
+                  <div className="edit-profile-field" style={{ marginTop: 14 }}>
+                    <label htmlFor="admin-confirm-password">Confirm new password</label>
+                    <input
+                      id="admin-confirm-password"
+                      type="password"
+                      value={passwordForm.confirmPassword}
+                      onChange={(e) =>
+                        setPasswordForm((prev) => ({
+                          ...prev,
+                          confirmPassword: e.target.value,
+                        }))
+                      }
+                      placeholder="Re-enter new password"
+                      required
+                      autoComplete="new-password"
+                    />
+                  </div>
+                </div>
+                <div className="edit-profile-footer">
+                  <button type="button" className="edit-profile-cancel-btn" onClick={closeAdminSettings}>
+                    Cancel
+                  </button>
+                  <button type="submit" className="edit-profile-save-btn" disabled={passwordSaving}>
+                    {passwordSaving ? 'Updating...' : 'Change password'}
+                  </button>
+                </div>
+              </form>
+            )}
           </div>
         </div>
       )}
