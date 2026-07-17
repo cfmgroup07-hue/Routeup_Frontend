@@ -13,6 +13,128 @@ import {
 import { CountryList, getCountryFlagCode, getFlagImageUrl } from '../utils/countries';
 import CustomSelect from './CustomSelect';
 import { getAllStudyAbroadDocs } from '../data/studyAbroadData';
+import { UNIVERSAL_DOCS, PR_OCCUPATIONS } from '../data/australiaPrData';
+
+const PR_PATHWAY_LABELS = {
+  '189': 'Skilled Independent Visa (Subclass 189)',
+  '190': 'Skilled Nominated Visa (Subclass 190)',
+  unsure: "I'm not sure (Please assess my eligibility)",
+};
+
+const PR_APPLICATION_SECTIONS = [
+  {
+    title: 'Personal Information',
+    fields: [
+      { key: 'fullName', label: 'Full Name', fromLead: 'name' },
+      { key: 'email', label: 'Email Address', fromLead: 'email' },
+      { key: 'mobile', label: 'Mobile Number (WhatsApp)', fromLead: 'phone' },
+      { key: 'dateOfBirth', label: 'Date of Birth' },
+      { key: 'passportNumber', label: 'Passport Number' },
+      { key: 'countryOfCitizenship', label: 'Country of Citizenship' },
+      { key: 'currentCountryOfResidence', label: 'Current Country of Residence' },
+      { key: 'maritalStatus', label: 'Marital Status' },
+    ],
+  },
+  {
+    title: 'Migration Pathway',
+    fields: [{ key: 'migrationPathway', label: 'Interested Pathway' }],
+  },
+  {
+    title: 'Education',
+    fields: [
+      { key: 'highestQualification', label: 'Highest Qualification' },
+      { key: 'fieldOfStudy', label: 'Field of Study' },
+      { key: 'university', label: 'University / Institution' },
+      { key: 'countryOfStudy', label: 'Country of Study' },
+      { key: 'graduationYear', label: 'Graduation Year' },
+    ],
+  },
+  {
+    title: 'English Language',
+    fields: [
+      { key: 'englishTestCompleted', label: 'English Test Completed' },
+      { key: 'englishTestType', label: 'Test Type' },
+      { key: 'englishOverall', label: 'Overall Score' },
+      { key: 'englishListening', label: 'Listening' },
+      { key: 'englishReading', label: 'Reading' },
+      { key: 'englishWriting', label: 'Writing' },
+      { key: 'englishSpeaking', label: 'Speaking' },
+      { key: 'englishTestDate', label: 'Test Date' },
+    ],
+  },
+  {
+    title: 'Partner Details',
+    fields: [
+      { key: 'partnerMigrating', label: 'Partner Migrating' },
+      { key: 'partnerOccupation', label: "Partner's Occupation" },
+      { key: 'partnerEnglishTest', label: "Partner's English Test" },
+      { key: 'partnerQualification', label: "Partner's Qualification" },
+    ],
+  },
+  {
+    title: 'Skills Assessment',
+    fields: [
+      { key: 'skillsAssessmentCompleted', label: 'Skills Assessment Completed' },
+      { key: 'assessingAuthority', label: 'Assessing Authority' },
+      { key: 'skillsAssessmentOutcome', label: 'Outcome' },
+    ],
+  },
+  {
+    title: 'Australian Study',
+    fields: [
+      { key: 'studiedInAustralia', label: 'Studied in Australia' },
+      { key: 'professionalYearCompleted', label: 'Professional Year Completed' },
+      { key: 'naatiAccreditation', label: 'NAATI Accreditation' },
+    ],
+  },
+];
+
+const formatPrApplicationValue = (key, value) => {
+  if (value === undefined || value === null || value === '') return null;
+  if (key === 'migrationPathway') return PR_PATHWAY_LABELS[value] || value;
+  if (['englishTestCompleted', 'partnerMigrating', 'skillsAssessmentCompleted', 'studiedInAustralia', 'professionalYearCompleted', 'naatiAccreditation'].includes(key)) {
+    return value === 'yes' ? 'Yes' : value === 'no' ? 'No' : value;
+  }
+  return String(value);
+};
+
+const getPrLeadFieldValue = (lead, field) => {
+  const details = lead.applicationDetails || {};
+  if (field.fromLead) {
+    return lead[field.fromLead] || details[field.key] || null;
+  }
+  return details[field.key] ?? null;
+};
+
+const hasPrApplicationData = (lead) =>
+  lead.source === 'document-upload' ||
+  (lead.applicationDetails && Object.keys(lead.applicationDetails).length > 0);
+
+const renderPrApplicationSections = (lead) =>
+  PR_APPLICATION_SECTIONS.map((section) => {
+    const rows = section.fields
+      .map((field) => {
+        const raw = getPrLeadFieldValue(lead, field);
+        const formatted = formatPrApplicationValue(field.key, raw);
+        if (!formatted) return null;
+        return (
+          <div className="detail-item" key={field.key}>
+            <span className="detail-label">{field.label}:</span>
+            <span className="detail-val">{formatted}</span>
+          </div>
+        );
+      })
+      .filter(Boolean);
+
+    if (rows.length === 0) return null;
+
+    return (
+      <div className="admin-modal-section pr-lead-form-section" key={section.title}>
+        <h4>{section.title}</h4>
+        <div className="admin-modal-grid">{rows}</div>
+      </div>
+    );
+  });
 
 const BOOKING_STATUS_OPTIONS = [
   { value: 'New', label: 'New' },
@@ -108,20 +230,27 @@ const AdminDashboard = ({ onLogout }) => {
   const [prLeadNotes, setPrLeadNotes] = useState('');
   const [prLeadsLoading, setPrLeadsLoading] = useState(false);
   const [prEditData, setPrEditData] = useState(null);
+  const [prMailSubject, setPrMailSubject] = useState('');
   const [prMailMessage, setPrMailMessage] = useState('');
   const [prMailFiles, setPrMailFiles] = useState([]);
   const [prMailSending, setPrMailSending] = useState(false);
+  const [prWrongDocs, setPrWrongDocs] = useState([]);
+  const [prReuploadNote, setPrReuploadNote] = useState('');
+  const [prReuploadSending, setPrReuploadSending] = useState(false);
 
   // Study Abroad / Students leads
   const [studentLeads, setStudentLeads] = useState([]);
   const [studentSearchTerm, setStudentSearchTerm] = useState('');
   const [studentCountryFilter, setStudentCountryFilter] = useState('');
   const [selectedStudentLead, setSelectedStudentLead] = useState(null);
-  const [studentModalMode, setStudentModalMode] = useState(null); // 'view' | 'edit'
+  const [studentModalMode, setStudentModalMode] = useState(null); // 'view' | 'edit' | 'mail' | 'reupload'
   const [studentLeadsLoading, setStudentLeadsLoading] = useState(false);
   const [studentEditData, setStudentEditData] = useState(null);
+  const [studentMailSubject, setStudentMailSubject] = useState('');
   const [studentMailMessage, setStudentMailMessage] = useState('');
+  const [studentMailFiles, setStudentMailFiles] = useState([]);
   const [studentWrongDocs, setStudentWrongDocs] = useState([]);
+  const [studentReuploadNote, setStudentReuploadNote] = useState('');
   const [studentMailSending, setStudentMailSending] = useState(false);
 
   // Admin profile / settings
@@ -488,6 +617,7 @@ const AdminDashboard = ({ onLogout }) => {
       status: lead.status || 'New',
       adminNotes: lead.adminNotes || '',
     });
+    setPrMailSubject(`RouteUp: Your Australia PR Follow-Up — ${lead.occupation || 'Update'}`);
     setPrMailMessage(lead.adminNotes || '');
     setPrMailFiles([]);
   };
@@ -516,8 +646,13 @@ const AdminDashboard = ({ onLogout }) => {
     setSelectedPrLead(null);
     setPrModalMode(null);
     setPrEditData(null);
+    setPrMailSubject('');
+    setPrMailMessage('');
     setPrMailFiles([]);
     setPrMailSending(false);
+    setPrWrongDocs([]);
+    setPrReuploadNote('');
+    setPrReuploadSending(false);
   };
 
   const handleUpdatePrLead = async (e) => {
@@ -559,8 +694,12 @@ const AdminDashboard = ({ onLogout }) => {
   const handleSendPrMail = async (e) => {
     e.preventDefault();
     if (!selectedPrLead) return;
+    if (!prMailSubject.trim()) {
+      toast.error('Please enter an email subject.');
+      return;
+    }
     if (!prMailMessage.trim() && prMailFiles.length === 0) {
-      toast.error('Please add notes or upload at least one file.');
+      toast.error('Please add a message or upload at least one attachment.');
       return;
     }
 
@@ -568,6 +707,7 @@ const AdminDashboard = ({ onLogout }) => {
     setPrMailSending(true);
     try {
       const formData = new FormData();
+      formData.append('subject', prMailSubject.trim());
       formData.append('notes', prMailMessage);
       prMailFiles.forEach((file) => formData.append('documents', file));
 
@@ -583,7 +723,7 @@ const AdminDashboard = ({ onLogout }) => {
           setPrLeads((prev) => prev.map((l) => (l._id === data.lead._id ? data.lead : l)));
           setSelectedPrLead(data.lead);
         }
-        toast.success('Notes uploaded and email sent!');
+        toast.success('Email sent successfully!');
         closePrLeadModal();
       } else if (response.status === 401) {
         handleUnauthorized();
@@ -770,7 +910,10 @@ const AdminDashboard = ({ onLogout }) => {
       status: lead.status || 'New',
       adminNotes: lead.adminNotes || '',
     });
-    setStudentMailMessage('');
+    setStudentMailSubject(`RouteUp: Your Study Abroad Follow-Up — ${lead.name || 'Update'}`);
+    setStudentMailMessage(lead.adminNotes || '');
+    setStudentMailFiles([]);
+    setStudentReuploadNote('');
     setStudentWrongDocs(
       (lead.uploadedDocuments || [])
         .filter((d) => d.needsReupload)
@@ -782,8 +925,11 @@ const AdminDashboard = ({ onLogout }) => {
     setSelectedStudentLead(null);
     setStudentModalMode(null);
     setStudentEditData(null);
+    setStudentMailSubject('');
     setStudentMailMessage('');
+    setStudentMailFiles([]);
     setStudentWrongDocs([]);
+    setStudentReuploadNote('');
     setStudentMailSending(false);
   };
 
@@ -858,6 +1004,55 @@ const AdminDashboard = ({ onLogout }) => {
     return Array.from(byTitle.values());
   };
 
+  const handleSendStudentMail = async (e) => {
+    e.preventDefault();
+    if (!selectedStudentLead) return;
+    if (!studentMailSubject.trim()) {
+      toast.error('Please enter an email subject.');
+      return;
+    }
+    if (!studentMailMessage.trim() && studentMailFiles.length === 0) {
+      toast.error('Please add a message or upload at least one attachment.');
+      return;
+    }
+
+    const token = localStorage.getItem('adminToken');
+    setStudentMailSending(true);
+    try {
+      const formData = new FormData();
+      formData.append('subject', studentMailSubject.trim());
+      formData.append('notes', studentMailMessage);
+      studentMailFiles.forEach((file) => formData.append('documents', file));
+
+      const response = await fetch(
+        `${API_URL}/api/study-abroad-leads/${selectedStudentLead._id}/send-email`,
+        {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+          body: formData,
+        }
+      );
+
+      const data = await response.json().catch(() => ({}));
+      if (response.ok) {
+        if (data.lead) {
+          setStudentLeads((prev) => prev.map((l) => (l._id === data.lead._id ? data.lead : l)));
+          setSelectedStudentLead(data.lead);
+        }
+        toast.success('Email sent successfully!');
+        closeStudentLeadModal();
+      } else if (response.status === 401) {
+        handleUnauthorized();
+      } else {
+        toast.error(data.message || 'Failed to send email');
+      }
+    } catch {
+      toast.error('Error sending follow-up email');
+    } finally {
+      setStudentMailSending(false);
+    }
+  };
+
   const handleSendStudentReuploadMail = async (e) => {
     e.preventDefault();
     if (!selectedStudentLead) return;
@@ -879,7 +1074,7 @@ const AdminDashboard = ({ onLogout }) => {
           },
           body: JSON.stringify({
             documentTitles: studentWrongDocs,
-            message: studentMailMessage.trim(),
+            message: studentReuploadNote.trim(),
           }),
         }
       );
@@ -912,6 +1107,94 @@ const AdminDashboard = ({ onLogout }) => {
       toast.error('Error sending re-upload email');
     } finally {
       setStudentMailSending(false);
+    }
+  };
+
+  const togglePrWrongDoc = (title) => {
+    setPrWrongDocs((prev) =>
+      prev.includes(title) ? prev.filter((t) => t !== title) : [...prev, title]
+    );
+  };
+
+  const getPrReuploadDocOptions = (lead) => {
+    if (!lead) return [];
+    let occDocs = [];
+    if (lead.occupation) {
+      for (const group of PR_OCCUPATIONS) {
+        const found = group.list.find((o) => o.name === lead.occupation);
+        if (found) {
+          occDocs = found.docs || [];
+          break;
+        }
+      }
+    }
+    const checklist = [...UNIVERSAL_DOCS, ...occDocs];
+    const byTitle = new Map();
+    checklist.forEach((title) => {
+      byTitle.set(title, { title, fileName: '', filePath: '', needsReupload: false });
+    });
+    (lead.uploadedDocuments || []).forEach((doc) => {
+      if (!doc?.title) return;
+      const prev = byTitle.get(doc.title) || { title: doc.title };
+      byTitle.set(doc.title, { ...prev, ...doc });
+    });
+    return Array.from(byTitle.values());
+  };
+
+  const handleSendPrReuploadMail = async (e) => {
+    e.preventDefault();
+    if (!selectedPrLead) return;
+    if (prWrongDocs.length === 0) {
+      toast.error('Select at least one document to request.');
+      return;
+    }
+
+    const token = localStorage.getItem('adminToken');
+    setPrReuploadSending(true);
+    try {
+      const response = await fetch(
+        `${API_URL}/api/pr-leads/${selectedPrLead._id}/request-reupload`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            documentTitles: prWrongDocs,
+            message: prReuploadNote.trim(),
+          }),
+        }
+      );
+      const data = await response.json().catch(() => ({}));
+      if (response.ok || response.status === 502) {
+        if (data.lead) {
+          setPrLeads((prev) => prev.map((l) => (l._id === data.lead._id ? data.lead : l)));
+          setSelectedPrLead(data.lead);
+        }
+        if (response.ok) {
+          toast.success('Re-upload email sent to candidate');
+          setPrModalMode('view');
+        } else {
+          toast.error(data.message || 'Email failed — link was still created');
+          if (data.reuploadUrl) {
+            try {
+              await navigator.clipboard.writeText(data.reuploadUrl);
+              toast.success('Re-upload link copied to clipboard');
+            } catch {
+              /* ignore */
+            }
+          }
+        }
+      } else if (response.status === 401) {
+        handleUnauthorized();
+      } else {
+        toast.error(data.message || 'Failed to send email');
+      }
+    } catch {
+      toast.error('Error sending re-upload email');
+    } finally {
+      setPrReuploadSending(false);
     }
   };
 
@@ -1233,6 +1516,24 @@ const AdminDashboard = ({ onLogout }) => {
       setTimeout(() => setSocketNotification(null), 8000);
     });
 
+    socket.on('australia_pr_lead_updated', (updatedLead) => {
+      setPrLeads((prev) => {
+        const exists = prev.some((l) => l._id === updatedLead._id);
+        if (!exists) return [updatedLead, ...prev];
+        return prev.map((l) => (l._id === updatedLead._id ? updatedLead : l));
+      });
+      setSelectedPrLead((current) =>
+        current && current._id === updatedLead._id ? updatedLead : current
+      );
+      setSocketNotification({
+        title: 'PR Lead documents updated',
+        message: `${updatedLead.name} re-uploaded Australia PR documents.`,
+        booking: null,
+        openPrLeads: true,
+      });
+      setTimeout(() => setSocketNotification(null), 8000);
+    });
+
     socket.on('new_notification', (newNotif) => {
       console.log('Socket new_notification:', newNotif);
       setNotifications((prev) => [newNotif, ...prev]);
@@ -1523,12 +1824,15 @@ const AdminDashboard = ({ onLogout }) => {
 
   const filteredPrLeads = prLeads.filter((lead) => {
     const q = prSearchTerm.toLowerCase();
+    const details = lead.applicationDetails || {};
+    const detailsText = Object.values(details).join(' ').toLowerCase();
     return (
       lead.name?.toLowerCase().includes(q) ||
       lead.email?.toLowerCase().includes(q) ||
       lead.phone?.includes(prSearchTerm) ||
       lead.occupation?.toLowerCase().includes(q) ||
-      lead.assessingBody?.toLowerCase().includes(q)
+      lead.assessingBody?.toLowerCase().includes(q) ||
+      detailsText.includes(q)
     );
   });
   const currentPrLeads = filteredPrLeads.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
@@ -1777,6 +2081,18 @@ const AdminDashboard = ({ onLogout }) => {
                   }}
                 >
                   Open Students
+                </button>
+              )}
+              {socketNotification.openPrLeads && (
+                <button
+                  className="admin-action-btn"
+                  style={{ fontSize: '11px', padding: '4px 8px' }}
+                  onClick={() => {
+                    setActiveTab('australia-pr');
+                    setSocketNotification(null);
+                  }}
+                >
+                  Open PR Leads
                 </button>
               )}
             </div>
@@ -2235,6 +2551,7 @@ const AdminDashboard = ({ onLogout }) => {
                         <th>Candidate</th>
                         <th>Contact</th>
                         <th>Occupation</th>
+                        <th>Pathway</th>
                         <th>Source</th>
                         <th>Payment</th>
                         <th>Docs</th>
@@ -2281,6 +2598,11 @@ const AdminDashboard = ({ onLogout }) => {
                           <td style={{ fontSize: 13, maxWidth: 200 }}>
                             <div style={{ fontWeight: 600 }}>{lead.occupation}</div>
                             <div style={{ fontSize: 11, color: '#64748b' }}>ANZSCO {lead.anzsco}</div>
+                          </td>
+                          <td style={{ fontSize: 12, maxWidth: 160 }}>
+                            {lead.applicationDetails?.migrationPathway
+                              ? formatPrApplicationValue('migrationPathway', lead.applicationDetails.migrationPathway)
+                              : '—'}
                           </td>
                           <td>
                             <span
@@ -2509,7 +2831,7 @@ const AdminDashboard = ({ onLogout }) => {
                               </button>
                               <button
                                 className="admin-action-btn icon-only"
-                                title="Request document re-upload"
+                                title="Send Email"
                                 onClick={() => openStudentLeadModal(lead, 'mail')}
                                 style={{ padding: 6, background: '#2563eb', color: '#fff', border: 'none' }}
                               >
@@ -2566,7 +2888,7 @@ const AdminDashboard = ({ onLogout }) => {
 
               <div className="admin-modal-grid">
                 <div className="admin-modal-section">
-                  <h4><Users size={14} style={{ verticalAlign: 'middle', marginRight: 6 }} /> Candidate</h4>
+                  <h4><Users size={14} style={{ verticalAlign: 'middle', marginRight: 6 }} /> Contact & Source</h4>
                   <div className="detail-item"><span className="detail-label">Name:</span><span className="detail-val">{selectedPrLead.name}</span></div>
                   <div className="detail-item"><span className="detail-label">Phone:</span><span className="detail-val">{selectedPrLead.phone}</span></div>
                   <div className="detail-item">
@@ -2582,7 +2904,7 @@ const AdminDashboard = ({ onLogout }) => {
                   <div className="detail-item">
                     <span className="detail-label">Source:</span>
                     <span className="detail-val">
-                      {selectedPrLead.source === 'document-upload' ? 'Document Upload' : 'Eligibility Check'}
+                      {selectedPrLead.source === 'document-upload' ? 'Apply Australia PR' : 'Eligibility Check'}
                     </span>
                   </div>
                   <div className="detail-item">
@@ -2598,6 +2920,16 @@ const AdminDashboard = ({ onLogout }) => {
                       <span className="detail-val" style={{ fontSize: 12 }}>{selectedPrLead.paymentId}</span>
                     </div>
                   )}
+                  <div className="detail-item">
+                    <span className="detail-label">Submitted:</span>
+                    <span className="detail-val">{new Date(selectedPrLead.createdAt).toLocaleString()}</span>
+                  </div>
+                </div>
+                <div className="admin-modal-section">
+                  <h4><Plane size={14} style={{ verticalAlign: 'middle', marginRight: 6 }} /> Occupation & Location</h4>
+                  <div className="detail-item"><span className="detail-label">Occupation:</span><span className="detail-val">{selectedPrLead.occupation}</span></div>
+                  <div className="detail-item"><span className="detail-label">ANZSCO:</span><span className="detail-val">{selectedPrLead.anzsco || '—'}</span></div>
+                  <div className="detail-item"><span className="detail-label">Assessing body:</span><span className="detail-val">{selectedPrLead.assessingBody || '—'}</span></div>
                   {selectedPrLead.origin && (
                     <div className="detail-item">
                       <span className="detail-label">Applying from:</span>
@@ -2608,18 +2940,26 @@ const AdminDashboard = ({ onLogout }) => {
                       </span>
                     </div>
                   )}
-                </div>
-                <div className="admin-modal-section">
-                  <h4><Plane size={14} style={{ verticalAlign: 'middle', marginRight: 6 }} /> Occupation</h4>
-                  <div className="detail-item"><span className="detail-label">Occupation:</span><span className="detail-val">{selectedPrLead.occupation}</span></div>
-                  <div className="detail-item"><span className="detail-label">ANZSCO:</span><span className="detail-val">{selectedPrLead.anzsco || '—'}</span></div>
-                  <div className="detail-item"><span className="detail-label">Assessing body:</span><span className="detail-val">{selectedPrLead.assessingBody || '—'}</span></div>
-                  <div className="detail-item">
-                    <span className="detail-label">Submitted:</span>
-                    <span className="detail-val">{new Date(selectedPrLead.createdAt).toLocaleString()}</span>
-                  </div>
+                  {selectedPrLead.applicationDetails?.migrationPathway && (
+                    <div className="detail-item">
+                      <span className="detail-label">Pathway:</span>
+                      <span className="detail-val">
+                        {formatPrApplicationValue(
+                          'migrationPathway',
+                          selectedPrLead.applicationDetails.migrationPathway
+                        )}
+                      </span>
+                    </div>
+                  )}
                 </div>
               </div>
+
+              {hasPrApplicationData(selectedPrLead) ? (
+                <div className="pr-lead-application-wrap">
+                  <h4 className="pr-lead-application-heading">Full Application Form</h4>
+                  {renderPrApplicationSections(selectedPrLead)}
+                </div>
+              ) : null}
 
               {selectedPrLead.existingExperience && (
                 <div className="admin-modal-section" style={{ marginTop: 16 }}>
@@ -2629,44 +2969,66 @@ const AdminDashboard = ({ onLogout }) => {
               )}
 
               <div className="admin-modal-section" style={{ marginTop: 16 }}>
-                <h4>Uploaded Documents ({(selectedPrLead.uploadedDocuments || []).length})</h4>
+                <h4>
+                  Document Checklist
+                  {(selectedPrLead.uploadedDocuments || []).length > 0 && (
+                    <span style={{ fontWeight: 500, fontSize: 13, color: '#64748b', marginLeft: 8 }}>
+                      ({(selectedPrLead.uploadedDocuments || []).filter((d) => d.filePath).length} uploaded / {(selectedPrLead.uploadedDocuments || []).length} total)
+                    </span>
+                  )}
+                </h4>
                 {(selectedPrLead.uploadedDocuments || []).length === 0 ? (
-                  <p style={{ fontSize: 13, color: '#94a3b8', margin: 0 }}>No documents attached</p>
+                  <p style={{ fontSize: 13, color: '#94a3b8', margin: 0 }}>No document checklist submitted</p>
                 ) : (
                   <div className="pr-lead-doc-list">
-                    {selectedPrLead.uploadedDocuments.map((doc, idx) => (
-                      <div className="pr-lead-doc-item" key={`${doc.title}-${idx}`}>
-                        <span>{doc.title}</span>
-                        {doc.filePath ? (
-                          <div className="pr-lead-doc-actions">
-                            <a
-                              className="pr-doc-btn view"
-                              href={`${API_URL}${doc.filePath}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                            >
-                              <Eye size={13} /> View
-                            </a>
-                            <button
-                              type="button"
-                              className="pr-doc-btn download"
-                              onClick={() => handlePrDocDownload(doc)}
-                            >
-                              <Download size={13} /> Download
-                            </button>
-                            <button
-                              type="button"
-                              className="pr-doc-btn delete"
-                              onClick={() => handleDeletePrDocument(doc.title)}
-                            >
-                              <Trash2 size={13} /> Delete
-                            </button>
+                    {selectedPrLead.uploadedDocuments
+                      .filter((doc) => doc.filePath)
+                      .map((doc, idx) => (
+                        <div className="pr-lead-doc-item student-view-doc-item" key={`${doc.title}-${idx}`}>
+                          <div className="student-view-doc-meta">
+                            <span className="student-view-doc-title">{doc.title}</span>
+                            {doc.filePath ? (
+                              <span className="badge status-completed" style={{ alignSelf: 'flex-start' }}>Uploaded</span>
+                            ) : (
+                              <span className="badge pay-pending" style={{ alignSelf: 'flex-start' }}>Not uploaded</span>
+                            )}
+                            {doc.fileName && (
+                              <small className="student-view-doc-file">{doc.fileName}</small>
+                            )}
+                            {doc.needsReupload && (
+                              <span className="student-view-doc-badge">Re-upload requested</span>
+                            )}
                           </div>
-                        ) : (
-                          <small>No file</small>
-                        )}
-                      </div>
-                    ))}
+                          {doc.filePath ? (
+                            <div className="pr-lead-doc-actions">
+                              <a
+                                className="pr-doc-btn view"
+                                href={`${API_URL}${doc.filePath}`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                              >
+                                <Eye size={13} /> View
+                              </a>
+                              <button
+                                type="button"
+                                className="pr-doc-btn download"
+                                onClick={() => handlePrDocDownload(doc)}
+                              >
+                                <Download size={13} /> Download
+                              </button>
+                              <button
+                                type="button"
+                                className="pr-doc-btn delete"
+                                onClick={() => handleDeletePrDocument(doc.title)}
+                              >
+                                <Trash2 size={13} /> Delete
+                              </button>
+                            </div>
+                          ) : (
+                            <span className="student-reupload-empty">No file</span>
+                          )}
+                        </div>
+                      ))}
                   </div>
                 )}
               </div>
@@ -2682,6 +3044,13 @@ const AdminDashboard = ({ onLogout }) => {
                 <button type="button" className="followup-cancel-btn" onClick={closePrLeadModal}>Close</button>
                 <button type="button" className="admin-action-btn" style={{ background: '#f59e0b', color: '#fff', border: 'none' }} onClick={() => setPrModalMode('edit')}>
                   <Edit size={14} /> Edit
+                </button>
+                <button type="button" className="admin-action-btn" style={{ background: '#10b981', color: '#fff', border: 'none' }} onClick={() => {
+                  setPrWrongDocs([]);
+                  setPrReuploadNote('');
+                  setPrModalMode('reupload');
+                }}>
+                  <UploadCloud size={14} /> Request Re-upload
                 </button>
                 <button type="button" className="admin-action-btn" style={{ background: '#2563eb', color: '#fff', border: 'none' }} onClick={() => setPrModalMode('mail')}>
                   <Mail size={14} /> Send Email
@@ -2831,73 +3200,181 @@ const AdminDashboard = ({ onLogout }) => {
               <div>
                 <h3>Send Australia PR Follow-Up</h3>
                 <p className="followup-modal-subtitle">
-                  Notes and files will be emailed to {selectedPrLead.email}
+                  Compose an email to send to the candidate
                 </p>
               </div>
               <button className="admin-modal-close" onClick={closePrLeadModal}>✕</button>
             </div>
             <form onSubmit={handleSendPrMail}>
               <div className="admin-modal-body">
-                <div className="followup-section">
-                  <label className="followup-label">
-                    <FileText size={16} />
-                    Follow-Up Notes
-                  </label>
-                  <textarea
-                    className="followup-textarea"
-                    placeholder="Write the PR guidance, document checklist notes, and next steps for the candidate..."
-                    value={prMailMessage}
-                    onChange={(e) => setPrMailMessage(e.target.value)}
-                  />
-                </div>
-
-                <div className="followup-section">
-                  <label className="followup-label">
-                    <UploadCloud size={16} />
-                    Upload Files
-                  </label>
-                  <label className="followup-upload-zone">
-                    <UploadCloud size={28} />
-                    <span className="followup-upload-title">Click to upload multiple files</span>
-                    <span className="followup-upload-hint">PDF, DOC, DOCX — up to 10 files</span>
+                <div className="followup-mail-compose">
+                  <div className="followup-mail-row">
+                    <label className="followup-mail-label">To</label>
                     <input
-                      type="file"
-                      multiple
-                      accept=".pdf,.doc,.docx,.jpg,.jpeg,.png"
-                      onChange={(e) => {
-                        const selected = Array.from(e.target.files || []);
-                        setPrMailFiles((prev) => [...prev, ...selected].slice(0, 10));
-                        e.target.value = '';
-                      }}
+                      type="text"
+                      className="followup-input followup-input-readonly"
+                      value={selectedPrLead.email}
+                      readOnly
                     />
-                  </label>
+                  </div>
 
-                  {prMailFiles.length > 0 && (
-                    <div className="followup-file-list">
-                      {prMailFiles.map((file, index) => (
-                        <div className="followup-file-item" key={`${file.name}-${index}`}>
-                          <div className="followup-file-info">
-                            <FileText size={16} />
-                            <span>{file.name}</span>
-                            <small>{(file.size / 1024 / 1024).toFixed(2)} MB</small>
+                  <div className="followup-mail-row">
+                    <label className="followup-mail-label">Subject <span className="req">*</span></label>
+                    <input
+                      type="text"
+                      className="followup-input"
+                      placeholder="Email subject line..."
+                      value={prMailSubject}
+                      onChange={(e) => setPrMailSubject(e.target.value)}
+                      required
+                    />
+                  </div>
+
+                  <div className="followup-mail-row followup-mail-row-stack">
+                    <label className="followup-mail-label">Description <span className="req">*</span></label>
+                    <textarea
+                      className="followup-textarea followup-mail-body"
+                      placeholder="Write your message to the candidate — PR guidance, document notes, next steps..."
+                      value={prMailMessage}
+                      onChange={(e) => setPrMailMessage(e.target.value)}
+                    />
+                  </div>
+
+                  <div className="followup-mail-row followup-mail-row-stack">
+                    <label className="followup-mail-label">
+                      <UploadCloud size={16} />
+                      Attachments
+                    </label>
+                    <label className="followup-upload-zone">
+                      <UploadCloud size={28} />
+                      <span className="followup-upload-title">Click to attach files</span>
+                      <span className="followup-upload-hint">PDF, DOC, DOCX, JPG, PNG — up to 10 files, 10MB each</span>
+                      <input
+                        type="file"
+                        multiple
+                        accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.webp"
+                        onChange={(e) => {
+                          const selected = Array.from(e.target.files || []);
+                          setPrMailFiles((prev) => [...prev, ...selected].slice(0, 10));
+                          e.target.value = '';
+                        }}
+                      />
+                    </label>
+
+                    {prMailFiles.length > 0 && (
+                      <div className="followup-file-list">
+                        {prMailFiles.map((file, index) => (
+                          <div className="followup-file-item" key={`${file.name}-${index}`}>
+                            <div className="followup-file-info">
+                              <FileText size={16} />
+                              <span>{file.name}</span>
+                              <small>{(file.size / 1024 / 1024).toFixed(2)} MB</small>
+                            </div>
+                            <button
+                              type="button"
+                              className="followup-file-remove"
+                              onClick={() => setPrMailFiles((prev) => prev.filter((_, i) => i !== index))}
+                            >
+                              Remove
+                            </button>
                           </div>
-                          <button
-                            type="button"
-                            className="followup-file-remove"
-                            onClick={() => setPrMailFiles((prev) => prev.filter((_, i) => i !== index))}
-                          >
-                            Remove
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
               <div className="followup-modal-footer">
                 <button type="button" className="followup-cancel-btn" onClick={closePrLeadModal}>Cancel</button>
                 <button type="submit" className="followup-send-btn" disabled={prMailSending}>
-                  {prMailSending ? 'Sending...' : 'Send to Candidate'}
+                  {prMailSending ? 'Sending...' : 'Send Email'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {selectedPrLead && prModalMode === 'reupload' && (
+        <div className="admin-modal-overlay">
+          <div className="admin-modal student-reupload-modal">
+            <div className="admin-modal-header">
+              <div>
+                <h3>Request document re-upload</h3>
+                <p className="pr-lead-modal-subtitle">
+                  Email <strong>{selectedPrLead.email}</strong> a secure link to upload or replace selected documents
+                </p>
+              </div>
+              <button className="admin-modal-close" onClick={closePrLeadModal}>✕</button>
+            </div>
+            <form onSubmit={handleSendPrReuploadMail}>
+              <div className="admin-modal-body">
+                <p className="student-reupload-help">
+                  Select any document to request — whether the candidate already uploaded it or not.
+                  They will get a link to upload only those files. When they submit, this panel updates automatically.
+                </p>
+
+                {(() => {
+                  const options = getPrReuploadDocOptions(selectedPrLead);
+                  if (options.length === 0) {
+                    return (
+                      <p className="student-reupload-empty">
+                        No document checklist found for this occupation.
+                      </p>
+                    );
+                  }
+                  return (
+                    <div className="student-reupload-doc-list">
+                      {options.map((doc, idx) => {
+                        const checked = prWrongDocs.includes(doc.title);
+                        const hasFile = Boolean(doc.filePath);
+                        return (
+                          <label
+                            key={`${doc.title}-${idx}`}
+                            className={`student-reupload-doc-item${checked ? ' selected' : ''}`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={checked}
+                              onChange={() => togglePrWrongDoc(doc.title)}
+                            />
+                            <span className="student-reupload-doc-text">
+                              <strong>{doc.title}</strong>
+                              <small>
+                                {hasFile
+                                  ? `Uploaded${doc.fileName ? `: ${doc.fileName}` : ''}`
+                                  : 'Not uploaded yet'}
+                                {doc.needsReupload ? ' · Re-upload already requested' : ''}
+                              </small>
+                            </span>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  );
+                })()}
+
+                <div className="edit-profile-field" style={{ marginTop: 18 }}>
+                  <label htmlFor="pr-reupload-note">Note to candidate (optional)</label>
+                  <textarea
+                    id="pr-reupload-note"
+                    rows={3}
+                    value={prReuploadNote}
+                    onChange={(e) => setPrReuploadNote(e.target.value)}
+                    placeholder="e.g. Passport scan is blurry — please upload a clear colour PDF of all pages."
+                  />
+                </div>
+              </div>
+              <div className="edit-profile-footer">
+                <button type="button" className="edit-profile-cancel-btn" onClick={closePrLeadModal}>
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="edit-profile-save-btn student-reupload-send-btn"
+                  disabled={prReuploadSending || prWrongDocs.length === 0}
+                >
+                  {prReuploadSending ? 'Sending...' : `Send link (${prWrongDocs.length})`}
                 </button>
               </div>
             </form>
@@ -3599,12 +4076,14 @@ const AdminDashboard = ({ onLogout }) => {
               )}
 
               <div className="admin-modal-section student-view-docs">
-                <h4>Uploaded Documents ({(selectedStudentLead.uploadedDocuments || []).length})</h4>
-                {(selectedStudentLead.uploadedDocuments || []).length === 0 ? (
+                <h4>Uploaded Documents ({(selectedStudentLead.uploadedDocuments || []).filter((d) => d.filePath).length})</h4>
+                {(selectedStudentLead.uploadedDocuments || []).filter((doc) => doc.filePath).length === 0 ? (
                   <p className="student-reupload-empty">No documents attached</p>
                 ) : (
                   <div className="pr-lead-doc-list">
-                    {selectedStudentLead.uploadedDocuments.map((doc, idx) => (
+                    {selectedStudentLead.uploadedDocuments
+                      .filter((doc) => doc.filePath)
+                      .map((doc, idx) => (
                       <div className="pr-lead-doc-item student-view-doc-item" key={`${doc.title}-${idx}`}>
                         <div className="student-view-doc-meta">
                           <span className="student-view-doc-title">{doc.title}</span>
@@ -3653,8 +4132,20 @@ const AdminDashboard = ({ onLogout }) => {
               </button>
               <button
                 type="button"
-                className="edit-profile-save-btn student-reupload-send-btn"
+                className="edit-profile-save-btn"
                 onClick={() => openStudentLeadModal(selectedStudentLead, 'mail')}
+                style={{ background: '#2563eb' }}
+              >
+                Send Email
+              </button>
+              <button
+                type="button"
+                className="edit-profile-save-btn student-reupload-send-btn"
+                onClick={() => {
+                  setStudentWrongDocs([]);
+                  setStudentReuploadNote('');
+                  setStudentModalMode('reupload');
+                }}
               >
                 Request re-upload
               </button>
@@ -3774,6 +4265,108 @@ const AdminDashboard = ({ onLogout }) => {
 
       {selectedStudentLead && studentModalMode === 'mail' && (
         <div className="admin-modal-overlay">
+          <div className="admin-modal followup-modal">
+            <div className="admin-modal-header">
+              <div>
+                <h3>Send Study Abroad Follow-Up</h3>
+                <p className="followup-modal-subtitle">
+                  Compose an email to send to the student
+                </p>
+              </div>
+              <button className="admin-modal-close" onClick={closeStudentLeadModal}>✕</button>
+            </div>
+            <form onSubmit={handleSendStudentMail}>
+              <div className="admin-modal-body">
+                <div className="followup-mail-compose">
+                  <div className="followup-mail-row">
+                    <label className="followup-mail-label">To</label>
+                    <input
+                      type="text"
+                      className="followup-input followup-input-readonly"
+                      value={selectedStudentLead.email}
+                      readOnly
+                    />
+                  </div>
+
+                  <div className="followup-mail-row">
+                    <label className="followup-mail-label">Subject <span className="req">*</span></label>
+                    <input
+                      type="text"
+                      className="followup-input"
+                      placeholder="Email subject line..."
+                      value={studentMailSubject}
+                      onChange={(e) => setStudentMailSubject(e.target.value)}
+                      required
+                    />
+                  </div>
+
+                  <div className="followup-mail-row followup-mail-row-stack">
+                    <label className="followup-mail-label">Description <span className="req">*</span></label>
+                    <textarea
+                      className="followup-textarea followup-mail-body"
+                      placeholder="Write your message to the student — course guidance, document notes, next steps..."
+                      value={studentMailMessage}
+                      onChange={(e) => setStudentMailMessage(e.target.value)}
+                    />
+                  </div>
+
+                  <div className="followup-mail-row followup-mail-row-stack">
+                    <label className="followup-mail-label">
+                      <UploadCloud size={16} />
+                      Attachments
+                    </label>
+                    <label className="followup-upload-zone">
+                      <UploadCloud size={28} />
+                      <span className="followup-upload-title">Click to attach files</span>
+                      <span className="followup-upload-hint">PDF, DOC, DOCX, JPG, PNG — up to 10 files, 10MB each</span>
+                      <input
+                        type="file"
+                        multiple
+                        accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.webp"
+                        onChange={(e) => {
+                          const selected = Array.from(e.target.files || []);
+                          setStudentMailFiles((prev) => [...prev, ...selected].slice(0, 10));
+                          e.target.value = '';
+                        }}
+                      />
+                    </label>
+
+                    {studentMailFiles.length > 0 && (
+                      <div className="followup-file-list">
+                        {studentMailFiles.map((file, index) => (
+                          <div className="followup-file-item" key={`${file.name}-${index}`}>
+                            <div className="followup-file-info">
+                              <FileText size={16} />
+                              <span>{file.name}</span>
+                              <small>{(file.size / 1024 / 1024).toFixed(2)} MB</small>
+                            </div>
+                            <button
+                              type="button"
+                              className="followup-file-remove"
+                              onClick={() => setStudentMailFiles((prev) => prev.filter((_, i) => i !== index))}
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+              <div className="followup-modal-footer">
+                <button type="button" className="followup-cancel-btn" onClick={closeStudentLeadModal}>Cancel</button>
+                <button type="submit" className="followup-send-btn" disabled={studentMailSending}>
+                  {studentMailSending ? 'Sending...' : 'Send Email'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {selectedStudentLead && studentModalMode === 'reupload' && (
+        <div className="admin-modal-overlay">
           <div className="admin-modal student-reupload-modal">
             <div className="admin-modal-header">
               <div>
@@ -3836,8 +4429,8 @@ const AdminDashboard = ({ onLogout }) => {
                   <textarea
                     id="student-reupload-note"
                     rows={3}
-                    value={studentMailMessage}
-                    onChange={(e) => setStudentMailMessage(e.target.value)}
+                    value={studentReuploadNote}
+                    onChange={(e) => setStudentReuploadNote(e.target.value)}
                     placeholder="e.g. Passport scan is blurry — please upload a clear colour PDF of all pages."
                   />
                 </div>

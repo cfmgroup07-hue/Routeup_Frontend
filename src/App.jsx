@@ -9,6 +9,7 @@ import AustraliaPREligibility from './components/AustraliaPREligibility';
 import StudyAbroadDocuments from './components/StudyAbroadDocuments';
 import StudyAbroadWhyDocuments from './components/StudyAbroadWhyDocuments';
 import StudyAbroadReupload from './components/StudyAbroadReupload';
+import AustraliaPRReupload from './components/AustraliaPRReupload';
 
 // Custom wrapper to manage admin authentication & session checks
 const AdminRoute = () => {
@@ -85,6 +86,7 @@ function App() {
         {/* Australia PR tools */}
         <Route path="/apply-australia-pr" element={<ApplyAustraliaPR />} />
         <Route path="/australia-pr-eligibility" element={<AustraliaPREligibility />} />
+        <Route path="/australia-pr-reupload/:token" element={<AustraliaPRReupload />} />
 
         {/* Study Abroad tools */}
         <Route path="/study-abroad-documents" element={<StudyAbroadDocuments />} />

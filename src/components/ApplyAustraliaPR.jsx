@@ -12,20 +12,61 @@ import {
   findOccupation,
 } from '../data/australiaPrData';
 
+const MARITAL_OPTIONS = ['Single', 'Married', 'De facto', 'Divorced', 'Widowed'];
+const PATHWAY_OPTIONS = [
+  { value: '189', label: 'Skilled Independent Visa (Subclass 189)' },
+  { value: '190', label: 'Skilled Nominated Visa (Subclass 190)' },
+  { value: 'unsure', label: "I'm not sure (Please assess my eligibility)" },
+];
+const QUALIFICATION_OPTIONS = ["Diploma", "Bachelor's Degree", "Master's Degree", 'PhD', 'Other'];
+const ENGLISH_TEST_TYPES = ['IELTS', 'PTE Academic', 'TOEFL', 'OET'];
+
+const emptyForm = () => ({
+  fullName: '',
+  email: '',
+  mobile: '',
+  dateOfBirth: '',
+  passportNumber: '',
+  countryOfCitizenship: '',
+  currentCountryOfResidence: '',
+  maritalStatus: '',
+  migrationPathway: '',
+  highestQualification: '',
+  fieldOfStudy: '',
+  university: '',
+  countryOfStudy: '',
+  graduationYear: '',
+  englishTestCompleted: '',
+  englishTestType: '',
+  englishOverall: '',
+  englishListening: '',
+  englishReading: '',
+  englishWriting: '',
+  englishSpeaking: '',
+  englishTestDate: '',
+  partnerMigrating: '',
+  partnerOccupation: '',
+  partnerEnglishTest: '',
+  partnerQualification: '',
+  skillsAssessmentCompleted: '',
+  assessingAuthority: '',
+  skillsAssessmentOutcome: '',
+  studiedInAustralia: '',
+  professionalYearCompleted: '',
+  naatiAccreditation: '',
+});
+
 const ApplyAustraliaPR = () => {
   const navigate = useNavigate();
   const [origin, setOrigin] = useState('offshore');
   const [country, setCountry] = useState('');
   const [state, setState] = useState('');
   const [occValue, setOccValue] = useState('');
+  const [form, setForm] = useState(emptyForm());
   const [docTitle, setDocTitle] = useState('');
   const [fileName, setFileName] = useState('');
   const [selectedFile, setSelectedFile] = useState(null);
   const [uploaded, setUploaded] = useState({});
-  const [leadName, setLeadName] = useState('');
-  const [leadPhone, setLeadPhone] = useState('');
-  const [leadEmail, setLeadEmail] = useState('');
-  const [leadNotes, setLeadNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   const occupation = useMemo(() => findOccupation(occValue), [occValue]);
@@ -39,20 +80,31 @@ const ApplyAustraliaPR = () => {
   const totalCount = allDocs.length;
   const progressPct = totalCount ? Math.round((uploadedCount / totalCount) * 100) : 0;
 
+  const updateForm = (field, value) => {
+    setForm((prev) => ({ ...prev, [field]: value }));
+  };
+
   const handleOccChange = (value) => {
     setOccValue(value);
     setUploaded({});
     setDocTitle('');
     setFileName('');
     setSelectedFile(null);
-    if (value) {
-      const occ = findOccupation(value);
-      if (occ) setDocTitle(UNIVERSAL_DOCS[0] || '');
+
+    const occ = findOccupation(value);
+    if (occ) {
+      setDocTitle(UNIVERSAL_DOCS[0] || '');
+      setForm((prev) => ({
+        ...prev,
+        assessingAuthority: prev.assessingAuthority || occ.body,
+      }));
+    } else {
+      setForm(emptyForm());
     }
   };
 
-  const MAX_FILE_BYTES = 10 * 1024 * 1024; // 10MB per file
-  const MAX_TOTAL_BYTES = 100 * 1024 * 1024; // 100MB total (many required docs)
+  const MAX_FILE_BYTES = 10 * 1024 * 1024;
+  const MAX_TOTAL_BYTES = 100 * 1024 * 1024;
 
   const missingDocs = useMemo(
     () => allDocs.filter((doc) => !uploaded[doc]?.file),
@@ -79,15 +131,49 @@ const ApplyAustraliaPR = () => {
     toast.success(`${docTitle} added`);
   };
 
-  const handleLeadSubmit = async () => {
-    if (!leadName.trim() || !leadPhone.trim() || !leadEmail.trim()) {
-      toast.error('Please fill in your name, phone, and email.');
-      return;
+  const validateForm = () => {
+    const required = [
+      ['fullName', 'Full Name'],
+      ['email', 'Email Address'],
+      ['mobile', 'Mobile Number'],
+      ['dateOfBirth', 'Date of Birth'],
+      ['countryOfCitizenship', 'Country of Citizenship'],
+      ['currentCountryOfResidence', 'Current Country of Residence'],
+      ['maritalStatus', 'Marital Status'],
+      ['migrationPathway', 'Migration Pathway'],
+      ['highestQualification', 'Highest Qualification'],
+      ['fieldOfStudy', 'Field of Study'],
+      ['university', 'University / Institution'],
+      ['countryOfStudy', 'Country of Study'],
+      ['graduationYear', 'Graduation Year'],
+      ['englishTestCompleted', 'English test completion status'],
+      ['partnerMigrating', 'Partner migration intent'],
+      ['skillsAssessmentCompleted', 'Skills Assessment status'],
+    ];
+
+    for (const [key, label] of required) {
+      if (!String(form[key] || '').trim()) {
+        toast.error(`Please fill in: ${label}`);
+        return false;
+      }
     }
+
+    if (form.englishTestCompleted === 'yes') {
+      if (!form.englishTestType) {
+        toast.error('Please select your English test type.');
+        return false;
+      }
+    }
+
+    return true;
+  };
+
+  const handleLeadSubmit = async () => {
     if (!occupation) {
       toast.error('Please select your occupation first.');
       return;
     }
+    if (!validateForm()) return;
 
     const files = allDocs
       .filter((title) => uploaded[title]?.file)
@@ -101,10 +187,10 @@ const ApplyAustraliaPR = () => {
     setSubmitting(true);
     try {
       const formData = new FormData();
-      formData.append('name', leadName.trim());
-      formData.append('phone', leadPhone.trim());
-      formData.append('email', leadEmail.trim());
-      formData.append('existingExperience', leadNotes.trim());
+      formData.append('name', form.fullName.trim());
+      formData.append('phone', form.mobile.trim());
+      formData.append('email', form.email.trim());
+      formData.append('existingExperience', '');
       formData.append('occupation', occupation.name);
       formData.append('anzsco', occupation.anzsco);
       formData.append('assessingBody', occupation.body);
@@ -113,7 +199,14 @@ const ApplyAustraliaPR = () => {
       formData.append('country', origin === 'offshore' ? country : '');
       formData.append('state', origin === 'onshore' ? state : '');
 
-      // Include full checklist so admin can see uploaded + missing titles
+      const { fullName, email, mobile, ...applicationDetails } = form;
+      formData.append('applicationDetails', JSON.stringify({
+        ...applicationDetails,
+        fullName: form.fullName.trim(),
+        email: form.email.trim(),
+        mobile: form.mobile.trim(),
+      }));
+
       const meta = allDocs.map((title) => {
         const info = uploaded[title];
         return {
@@ -139,7 +232,7 @@ const ApplyAustraliaPR = () => {
         throw new Error(err.message || 'Failed to submit');
       }
 
-      toast.success('Details saved! Redirecting to book your session...');
+      toast.success('Application submitted! Redirecting to book your session...');
       navigate({ pathname: '/', hash: 'book' });
     } catch (error) {
       toast.error(error.message || 'Could not submit. Please try again.');
@@ -148,6 +241,27 @@ const ApplyAustraliaPR = () => {
     }
   };
 
+  const RadioGroup = ({ name, options, value, onChange }) => (
+    <div className="pr-radio-row">
+      {options.map((opt) => {
+        const optValue = typeof opt === 'string' ? opt : opt.value;
+        const optLabel = typeof opt === 'string' ? opt : opt.label;
+        return (
+          <label className="pr-radio" key={optValue}>
+            <input
+              type="radio"
+              name={name}
+              value={optValue}
+              checked={value === optValue}
+              onChange={() => onChange(optValue)}
+            />
+            {optLabel}
+          </label>
+        );
+      })}
+    </div>
+  );
+
   return (
     <div className="pr-page">
       <SiteNavbar active="australia-pr" />
@@ -155,11 +269,11 @@ const ApplyAustraliaPR = () => {
       <section className="pr-hero">
         <div className="pr-hero-badge">Australia PR Migration Pathway</div>
         <h1>
-          Your <span className="green">Australia PR</span> document checklist, built for your occupation.
+          Your <span className="green">Australia PR</span> application — tell us about yourself first.
         </h1>
         <p>
-          Select your nominated occupation and we&apos;ll show the exact documents your assessing body
-          requires — then you can upload them here for our team to review before your session.
+          Select your nominated occupation, complete your profile, then upload any documents you already have.
+          Our team will review everything before your session.
         </p>
 
         <div className="pr-missing-banner">
@@ -174,7 +288,7 @@ const ApplyAustraliaPR = () => {
         <div className="pr-container">
           <div className="pr-page-title">
             <Plane size={22} />
-            <span>Routeup PR application: document upload</span>
+            <span>Routeup PR application</span>
           </div>
 
           <div className="pr-card">
@@ -257,8 +371,401 @@ const ApplyAustraliaPR = () => {
 
           {occupation && (
             <>
+              {/* ── Application Form (shown first) ── */}
+              <div className="pr-card pr-application-form">
+                <h3 className="pr-card-title">Your application details</h3>
+                <p className="pr-form-intro">
+                  Complete the sections below so we can assess your eligibility and prepare for your session.
+                </p>
+
+                {/* Personal Information */}
+                <div className="pr-form-section">
+                  <h4 className="pr-form-section-title">Personal Information</h4>
+                  <div className="pr-form-row">
+                    <div className="pr-form-group">
+                      <label>Full Name <span className="req">*</span></label>
+                      <input
+                        type="text"
+                        value={form.fullName}
+                        onChange={(e) => updateForm('fullName', e.target.value)}
+                        placeholder="Enter your full name"
+                      />
+                    </div>
+                    <div className="pr-form-group">
+                      <label>Email Address <span className="req">*</span></label>
+                      <input
+                        type="email"
+                        value={form.email}
+                        onChange={(e) => updateForm('email', e.target.value)}
+                        placeholder="your@email.com"
+                      />
+                    </div>
+                  </div>
+                  <div className="pr-form-row">
+                    <div className="pr-form-group">
+                      <label>Mobile Number (WhatsApp) <span className="req">*</span></label>
+                      <input
+                        type="tel"
+                        value={form.mobile}
+                        onChange={(e) => updateForm('mobile', e.target.value)}
+                        placeholder="+91 98765 43210"
+                      />
+                    </div>
+                    <div className="pr-form-group">
+                      <label>Date of Birth <span className="req">*</span></label>
+                      <input
+                        type="date"
+                        value={form.dateOfBirth}
+                        onChange={(e) => updateForm('dateOfBirth', e.target.value)}
+                      />
+                    </div>
+                  </div>
+                  <div className="pr-form-row">
+                    <div className="pr-form-group">
+                      <label>Passport Number</label>
+                      <input
+                        type="text"
+                        value={form.passportNumber}
+                        onChange={(e) => updateForm('passportNumber', e.target.value)}
+                        placeholder="Optional"
+                      />
+                    </div>
+                    <div className="pr-form-group">
+                      <label>Country of Citizenship <span className="req">*</span></label>
+                      <select
+                        className="pr-select"
+                        value={form.countryOfCitizenship}
+                        onChange={(e) => updateForm('countryOfCitizenship', e.target.value)}
+                      >
+                        <option value="">Select country</option>
+                        {PR_COUNTRIES.map((c) => (
+                          <option key={c} value={c}>{c}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  <div className="pr-form-row">
+                    <div className="pr-form-group">
+                      <label>Current Country of Residence <span className="req">*</span></label>
+                      <select
+                        className="pr-select"
+                        value={form.currentCountryOfResidence}
+                        onChange={(e) => updateForm('currentCountryOfResidence', e.target.value)}
+                      >
+                        <option value="">Select country</option>
+                        {PR_COUNTRIES.map((c) => (
+                          <option key={c} value={c}>{c}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="pr-form-group">
+                      <label>Marital Status <span className="req">*</span></label>
+                      <select
+                        className="pr-select"
+                        value={form.maritalStatus}
+                        onChange={(e) => updateForm('maritalStatus', e.target.value)}
+                      >
+                        <option value="">Select status</option>
+                        {MARITAL_OPTIONS.map((s) => (
+                          <option key={s} value={s}>{s}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Migration Pathway */}
+                <div className="pr-form-section">
+                  <h4 className="pr-form-section-title">Migration Pathway</h4>
+                  <p className="pr-form-hint">Which pathway are you interested in?</p>
+                  <RadioGroup
+                    name="migrationPathway"
+                    options={PATHWAY_OPTIONS}
+                    value={form.migrationPathway}
+                    onChange={(v) => updateForm('migrationPathway', v)}
+                  />
+                </div>
+
+                {/* Education */}
+                <div className="pr-form-section">
+                  <h4 className="pr-form-section-title">Education</h4>
+                  <div className="pr-form-row">
+                    <div className="pr-form-group">
+                      <label>Highest Qualification <span className="req">*</span></label>
+                      <select
+                        className="pr-select"
+                        value={form.highestQualification}
+                        onChange={(e) => updateForm('highestQualification', e.target.value)}
+                      >
+                        <option value="">Select qualification</option>
+                        {QUALIFICATION_OPTIONS.map((q) => (
+                          <option key={q} value={q}>{q}</option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="pr-form-group">
+                      <label>Field of Study <span className="req">*</span></label>
+                      <input
+                        type="text"
+                        value={form.fieldOfStudy}
+                        onChange={(e) => updateForm('fieldOfStudy', e.target.value)}
+                        placeholder="e.g. Computer Science"
+                      />
+                    </div>
+                  </div>
+                  <div className="pr-form-row">
+                    <div className="pr-form-group">
+                      <label>University / Institution <span className="req">*</span></label>
+                      <input
+                        type="text"
+                        value={form.university}
+                        onChange={(e) => updateForm('university', e.target.value)}
+                        placeholder="Name of institution"
+                      />
+                    </div>
+                    <div className="pr-form-group">
+                      <label>Country of Study <span className="req">*</span></label>
+                      <select
+                        className="pr-select"
+                        value={form.countryOfStudy}
+                        onChange={(e) => updateForm('countryOfStudy', e.target.value)}
+                      >
+                        <option value="">Select country</option>
+                        {PR_COUNTRIES.map((c) => (
+                          <option key={c} value={c}>{c}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+                  <div className="pr-form-row">
+                    <div className="pr-form-group">
+                      <label>Graduation Year <span className="req">*</span></label>
+                      <input
+                        type="number"
+                        min="1970"
+                        max="2030"
+                        value={form.graduationYear}
+                        onChange={(e) => updateForm('graduationYear', e.target.value)}
+                        placeholder="e.g. 2018"
+                      />
+                    </div>
+                    <div className="pr-form-group" />
+                  </div>
+                </div>
+
+                {/* English Language */}
+                <div className="pr-form-section">
+                  <h4 className="pr-form-section-title">English Language</h4>
+                  <p className="pr-form-hint">Have you completed an English test?</p>
+                  <RadioGroup
+                    name="englishTestCompleted"
+                    options={[{ value: 'yes', label: 'Yes' }, { value: 'no', label: 'No' }]}
+                    value={form.englishTestCompleted}
+                    onChange={(v) => updateForm('englishTestCompleted', v)}
+                  />
+
+                  {form.englishTestCompleted === 'yes' && (
+                    <div className="pr-conditional-block">
+                      <div className="pr-form-group" style={{ marginBottom: 12 }}>
+                        <label>Test Type <span className="req">*</span></label>
+                        <select
+                          className="pr-select"
+                          value={form.englishTestType}
+                          onChange={(e) => updateForm('englishTestType', e.target.value)}
+                        >
+                          <option value="">Select test type</option>
+                          {ENGLISH_TEST_TYPES.map((t) => (
+                            <option key={t} value={t}>{t}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="pr-form-row">
+                        <div className="pr-form-group">
+                          <label>Overall Score</label>
+                          <input
+                            type="text"
+                            value={form.englishOverall}
+                            onChange={(e) => updateForm('englishOverall', e.target.value)}
+                            placeholder="e.g. 7.5"
+                          />
+                        </div>
+                        <div className="pr-form-group">
+                          <label>Test Date</label>
+                          <input
+                            type="date"
+                            value={form.englishTestDate}
+                            onChange={(e) => updateForm('englishTestDate', e.target.value)}
+                          />
+                        </div>
+                      </div>
+                      <div className="pr-form-row">
+                        <div className="pr-form-group">
+                          <label>Listening</label>
+                          <input
+                            type="text"
+                            value={form.englishListening}
+                            onChange={(e) => updateForm('englishListening', e.target.value)}
+                          />
+                        </div>
+                        <div className="pr-form-group">
+                          <label>Reading</label>
+                          <input
+                            type="text"
+                            value={form.englishReading}
+                            onChange={(e) => updateForm('englishReading', e.target.value)}
+                          />
+                        </div>
+                      </div>
+                      <div className="pr-form-row">
+                        <div className="pr-form-group">
+                          <label>Writing</label>
+                          <input
+                            type="text"
+                            value={form.englishWriting}
+                            onChange={(e) => updateForm('englishWriting', e.target.value)}
+                          />
+                        </div>
+                        <div className="pr-form-group">
+                          <label>Speaking</label>
+                          <input
+                            type="text"
+                            value={form.englishSpeaking}
+                            onChange={(e) => updateForm('englishSpeaking', e.target.value)}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Partner Details */}
+                <div className="pr-form-section">
+                  <h4 className="pr-form-section-title">Partner Details (if applicable)</h4>
+                  <p className="pr-form-hint">Does your partner intend to migrate with you?</p>
+                  <RadioGroup
+                    name="partnerMigrating"
+                    options={[{ value: 'yes', label: 'Yes' }, { value: 'no', label: 'No' }]}
+                    value={form.partnerMigrating}
+                    onChange={(v) => updateForm('partnerMigrating', v)}
+                  />
+
+                  {form.partnerMigrating === 'yes' && (
+                    <div className="pr-conditional-block">
+                      <div className="pr-form-row">
+                        <div className="pr-form-group">
+                          <label>Partner&apos;s Occupation</label>
+                          <input
+                            type="text"
+                            value={form.partnerOccupation}
+                            onChange={(e) => updateForm('partnerOccupation', e.target.value)}
+                          />
+                        </div>
+                        <div className="pr-form-group">
+                          <label>Partner&apos;s English Test</label>
+                          <input
+                            type="text"
+                            value={form.partnerEnglishTest}
+                            onChange={(e) => updateForm('partnerEnglishTest', e.target.value)}
+                            placeholder="e.g. IELTS 7.0"
+                          />
+                        </div>
+                      </div>
+                      <div className="pr-form-group">
+                        <label>Partner&apos;s Qualification</label>
+                        <input
+                          type="text"
+                          value={form.partnerQualification}
+                          onChange={(e) => updateForm('partnerQualification', e.target.value)}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Skills Assessment */}
+                <div className="pr-form-section">
+                  <h4 className="pr-form-section-title">Skills Assessment</h4>
+                  <p className="pr-form-hint">Have you completed a Skills Assessment? <span className="req">*</span></p>
+                  <RadioGroup
+                    name="skillsAssessmentCompleted"
+                    options={[{ value: 'yes', label: 'Yes' }, { value: 'no', label: 'No' }]}
+                    value={form.skillsAssessmentCompleted}
+                    onChange={(v) => updateForm('skillsAssessmentCompleted', v)}
+                  />
+
+                  {form.skillsAssessmentCompleted === 'yes' && (
+                    <div className="pr-conditional-block">
+                      <div className="pr-form-row">
+                        <div className="pr-form-group">
+                          <label>Assessing Authority</label>
+                          <input
+                            type="text"
+                            value={form.assessingAuthority}
+                            onChange={(e) => updateForm('assessingAuthority', e.target.value)}
+                            placeholder="Optional"
+                          />
+                        </div>
+                        <div className="pr-form-group">
+                          <label>Outcome</label>
+                          <input
+                            type="text"
+                            value={form.skillsAssessmentOutcome}
+                            onChange={(e) => updateForm('skillsAssessmentOutcome', e.target.value)}
+                            placeholder="Optional — e.g. Suitable"
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                {/* Australian Study */}
+                <div className="pr-form-section">
+                  <h4 className="pr-form-section-title">Australian Study (Optional)</h4>
+                  <div className="pr-form-row">
+                    <div className="pr-form-group">
+                      <label>Have you studied in Australia?</label>
+                      <select
+                        className="pr-select"
+                        value={form.studiedInAustralia}
+                        onChange={(e) => updateForm('studiedInAustralia', e.target.value)}
+                      >
+                        <option value="">Select</option>
+                        <option value="yes">Yes</option>
+                        <option value="no">No</option>
+                      </select>
+                    </div>
+                    <div className="pr-form-group">
+                      <label>Have you completed a Professional Year?</label>
+                      <select
+                        className="pr-select"
+                        value={form.professionalYearCompleted}
+                        onChange={(e) => updateForm('professionalYearCompleted', e.target.value)}
+                      >
+                        <option value="">Select</option>
+                        <option value="yes">Yes</option>
+                        <option value="no">No</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div className="pr-form-group">
+                    <label>Do you have NAATI accreditation?</label>
+                    <select
+                      className="pr-select"
+                      value={form.naatiAccreditation}
+                      onChange={(e) => updateForm('naatiAccreditation', e.target.value)}
+                    >
+                      <option value="">Select</option>
+                      <option value="yes">Yes</option>
+                      <option value="no">No</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              {/* ── Document Upload (below form) ── */}
               <div className="pr-card">
-                <p className="pr-label">Upload a document</p>
+                <h3 className="pr-card-title">Document upload</h3>
                 <p className="pr-upload-required-note">
                   Documents are optional — upload what you have now. Yellow = not uploaded yet, green = uploaded.
                   You can submit even if some files are still missing.
@@ -355,51 +862,13 @@ const ApplyAustraliaPR = () => {
               </div>
 
               <div className="pr-card">
-                <h3 className="pr-card-title">Want to talk it through?</h3>
-                <div className="pr-form-row">
-                  <div className="pr-form-group">
-                    <label>Full name <span className="req">*</span></label>
-                    <input
-                      type="text"
-                      value={leadName}
-                      onChange={(e) => setLeadName(e.target.value)}
-                      placeholder="Enter your full name"
-                    />
-                  </div>
-                  <div className="pr-form-group">
-                    <label>Phone / WhatsApp <span className="req">*</span></label>
-                    <input
-                      type="tel"
-                      value={leadPhone}
-                      onChange={(e) => setLeadPhone(e.target.value)}
-                      placeholder="+91 98765 43210"
-                    />
-                  </div>
-                </div>
-                <div className="pr-form-group" style={{ marginBottom: 16 }}>
-                  <label>Email address <span className="req">*</span></label>
-                  <input
-                    type="email"
-                    value={leadEmail}
-                    onChange={(e) => setLeadEmail(e.target.value)}
-                    placeholder="your@email.com"
-                  />
-                </div>
-                <div className="pr-form-group" style={{ marginBottom: 16 }}>
-                  <label>What experience or training do you already have?</label>
-                  <textarea
-                    value={leadNotes}
-                    onChange={(e) => setLeadNotes(e.target.value)}
-                    placeholder="e.g. 5 years as an electrician, no formal trade certificate, trained on the job..."
-                  />
-                </div>
                 <button
                   type="button"
                   className="pr-submit-btn"
                   onClick={handleLeadSubmit}
                   disabled={submitting}
                 >
-                  {submitting ? 'Saving...' : 'Book a Visa & Migration session'}
+                  {submitting ? 'Submitting...' : 'Submit application & book session'}
                 </button>
                 <p className="pr-secure-note">
                   After you submit, our team will connect with you within 24 hours.
