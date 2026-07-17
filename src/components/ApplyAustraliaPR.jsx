@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { Check, Plane, Upload } from 'lucide-react';
 import SiteNavbar from './SiteNavbar';
+import SiteFooter from './SiteFooter';
 import { API_URL } from '../config';
 import {
   AU_STATES,
@@ -868,7 +869,7 @@ const ApplyAustraliaPR = () => {
                   onClick={handleLeadSubmit}
                   disabled={submitting}
                 >
-                  {submitting ? 'Submitting...' : 'Submit application & book session'}
+                  {submitting ? 'Submitting...' : 'Submit application'}
                 </button>
                 <p className="pr-secure-note">
                   After you submit, our team will connect with you within 24 hours.
@@ -879,17 +880,7 @@ const ApplyAustraliaPR = () => {
         </div>
       </section>
 
-      <footer className="pr-footer">
-        <img src="/Routeup Logo.png" alt="RouteUp" className="pr-footer-logo" />
-        <p>Career Advisory & Migration Guidance</p>
-        <div className="pr-footer-links">
-          <Link to="/">Home</Link>
-          <Link to="/apply-australia-pr">Apply Australia PR</Link>
-          <Link to="/australia-pr-eligibility">Eligibility Check</Link>
-          <Link to="/#book">Book Session</Link>
-        </div>
-        <p className="pr-footer-copy">© 2026 RouteUp. All rights reserved.</p>
-      </footer>
+      <SiteFooter />
     </div>
   );
 };

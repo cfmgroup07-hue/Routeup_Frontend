@@ -66,6 +66,13 @@ const SiteNavbar = ({ active = '' }) => {
         >
           Apply Australia PR
         </Link>
+        <Link
+          to="/ballot-visa-awareness"
+          className={active === 'ballot-awareness' ? 'nav-active' : ''}
+          onClick={closeMenu}
+        >
+          Ballot Visa Awareness
+        </Link>
         <button type="button" onClick={() => goHomeSection('#awareness')}>Scam Alerts</button>
         <button type="button" className="nav-cta" onClick={() => goHomeSection('#book')}>
           Book Session

@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { Check, Upload } from 'lucide-react';
 import SiteNavbar from './SiteNavbar';
+import SiteFooter from './SiteFooter';
 import { API_URL } from '../config';
 import {
   STUDY_ABROAD_COUNTRIES,
@@ -333,7 +334,7 @@ const StudyAbroadDocuments = () => {
             {submitting
               ? 'Saving...'
               : country
-                ? 'Submit & continue to booking'
+                ? 'Submit & continue'
                 : 'Select a country to continue'}
           </button>
           <p className="pr-secure-note">
@@ -343,17 +344,7 @@ const StudyAbroadDocuments = () => {
         </div>
       </section>
 
-      <footer className="pr-footer">
-        <img src="/Routeup Logo.png" alt="RouteUp" className="pr-footer-logo" />
-        <p>Career Advisory &amp; Migration Guidance</p>
-        <div className="pr-footer-links">
-          <Link to="/">Home</Link>
-          <Link to="/study-abroad-documents">Study Abroad Docs</Link>
-          <Link to="/study-abroad-why-documents">Why these docs</Link>
-          <Link to="/#book">Book Session</Link>
-        </div>
-        <p className="pr-footer-copy">© 2026 RouteUp. All rights reserved.</p>
-      </footer>
+      <SiteFooter />
     </div>
   );
 };

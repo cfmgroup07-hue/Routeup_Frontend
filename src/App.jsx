@@ -10,6 +10,7 @@ import StudyAbroadDocuments from './components/StudyAbroadDocuments';
 import StudyAbroadWhyDocuments from './components/StudyAbroadWhyDocuments';
 import StudyAbroadReupload from './components/StudyAbroadReupload';
 import AustraliaPRReupload from './components/AustraliaPRReupload';
+import BallotVisaAwareness from './components/BallotVisaAwareness';
 
 // Custom wrapper to manage admin authentication & session checks
 const AdminRoute = () => {
@@ -31,6 +32,7 @@ const AdminRoute = () => {
     localStorage.removeItem('adminEmail');
     localStorage.removeItem('adminName');
     localStorage.removeItem('adminAvatar');
+    localStorage.removeItem('adminRole');
     setIsAuthenticated(false);
     window.location.href = '/';
   };
@@ -87,6 +89,7 @@ function App() {
         <Route path="/apply-australia-pr" element={<ApplyAustraliaPR />} />
         <Route path="/australia-pr-eligibility" element={<AustraliaPREligibility />} />
         <Route path="/australia-pr-reupload/:token" element={<AustraliaPRReupload />} />
+        <Route path="/ballot-visa-awareness" element={<BallotVisaAwareness />} />
 
         {/* Study Abroad tools */}
         <Route path="/study-abroad-documents" element={<StudyAbroadDocuments />} />

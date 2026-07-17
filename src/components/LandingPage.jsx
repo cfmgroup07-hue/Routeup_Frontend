@@ -11,6 +11,7 @@ const {
 import { API_URL, SOCKET_URL } from '../config';
 import { getFlagImageUrl } from '../utils/countries';
 import SiteNavbar from './SiteNavbar';
+import SiteFooter from './SiteFooter';
 
 const PRICE_PER_SERVICE = 250;
 
@@ -1208,29 +1209,7 @@ const LandingPage = ({ onAdminClick }) => {
       </section>
 
       {/* FOOTER */}
-      <footer className="footer">
-        <div className="footer-container">
-          <div className="footer-logo">
-            <img src="/Routeup Logo.png" alt="RouteUp Logo" style={{ height: '44px', objectFit: 'contain' }} />
-          </div>
-          <p className="footer-tagline">Career Advisory & Migration Guidance</p>
-          
-          <div className="footer-links">
-            <a href="#about">About Us</a>
-            <a href="#services">Services</a>
-            <a href="#education">Visa Guide</a>
-            <Link to="/apply-australia-pr">Apply Australia PR</Link>
-            <a href="#awareness">Scam Alerts</a>
-            <button onClick={scrollToForm} style={{ color: '#fff', fontWeight: '700', border: 'none', background: 'none', cursor: 'pointer' }}>Book Session</button>
-          </div>
-
-          <div className="footer-contact">
-            <p><span onDoubleClick={onAdminClick} style={{ cursor: 'pointer', userSelect: 'none' }}>Questions?</span> Reach us at <a href="mailto:hello@routeup.co.in">hello@routeup.co.in</a></p>
-          </div>
-          
-          <p className="footer-bottom">© 2026 RouteUp. All rights reserved.</p>
-        </div>
-      </footer>
+      <SiteFooter />
 
       {/* SUCCESS CONFIRMATION MODAL */}
       {paymentStep === 'success' && (

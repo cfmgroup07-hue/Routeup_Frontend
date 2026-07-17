@@ -198,6 +198,7 @@ const AdminDashboard = ({ onLogout }) => {
     localStorage.removeItem('adminEmail');
     localStorage.removeItem('adminName');
     localStorage.removeItem('adminAvatar');
+    localStorage.removeItem('adminRole');
     toast.error('Session expired. Please log in again.');
     onLogout();
   };
@@ -252,6 +253,13 @@ const AdminDashboard = ({ onLogout }) => {
   const [studentWrongDocs, setStudentWrongDocs] = useState([]);
   const [studentReuploadNote, setStudentReuploadNote] = useState('');
   const [studentMailSending, setStudentMailSending] = useState(false);
+
+  // Activity Logs States
+  const [activityLogs, setActivityLogs] = useState([]);
+  const [logsLoading, setLogsLoading] = useState(false);
+  const [logSearchTerm, setLogSearchTerm] = useState('');
+  const [logActionFilter, setLogActionFilter] = useState('');
+  const [selectedLog, setSelectedLog] = useState(null);
 
   // Admin profile / settings
   const [adminProfile, setAdminProfile] = useState({
@@ -755,6 +763,31 @@ const AdminDashboard = ({ onLogout }) => {
       console.error('Failed to fetch study abroad leads:', error);
     } finally {
       setStudentLeadsLoading(false);
+    }
+  };
+
+  const fetchActivityLogs = async () => {
+    const token = localStorage.getItem('adminToken');
+    const role = localStorage.getItem('adminRole');
+    if (!token || role !== 'superadmin') return;
+
+    setLogsLoading(true);
+    try {
+      const response = await fetch(`${API_URL}/api/auth/activities`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setActivityLogs(data);
+      } else if (response.status === 401) {
+        handleUnauthorized();
+      } else {
+        toast.error('Failed to fetch activity logs');
+      }
+    } catch (error) {
+      console.error('Failed to fetch activity logs:', error);
+    } finally {
+      setLogsLoading(false);
     }
   };
 
@@ -1433,6 +1466,7 @@ const AdminDashboard = ({ onLogout }) => {
     fetchPrLeads();
     fetchStudentLeads();
     fetchNotifications();
+    fetchActivityLogs();
 
     // Socket.io Connection
     const socket = io(`${SOCKET_URL}`);
@@ -1857,6 +1891,33 @@ const AdminDashboard = ({ onLogout }) => {
   );
   const totalStudentLeadsPages = Math.ceil(filteredStudentLeads.length / itemsPerPage);
 
+  const filteredLogs = activityLogs.filter(log => {
+    const q = logSearchTerm.toLowerCase();
+    const matchesSearch = 
+      log.adminEmail.toLowerCase().includes(q) ||
+      (log.adminName && log.adminName.toLowerCase().includes(q)) ||
+      log.details.toLowerCase().includes(q) ||
+      log.action.toLowerCase().includes(q);
+      
+    if (logActionFilter === '') return matchesSearch;
+    if (logActionFilter === 'auth') {
+      return matchesSearch && ['LOGIN', 'UPDATE_PROFILE', 'CHANGE_PASSWORD'].includes(log.action);
+    }
+    if (logActionFilter === 'emails') {
+      return matchesSearch && ['SEND_PR_EMAIL', 'SEND_STUDENT_EMAIL', 'SEND_POST_MEETING_EMAIL', 'SCHEDULE_MEETING', 'REQUEST_PR_REUPLOAD', 'REQUEST_STUDENT_REUPLOAD'].includes(log.action);
+    }
+    if (logActionFilter === 'bookings') {
+      return matchesSearch && log.action.includes('BOOKING');
+    }
+    if (logActionFilter === 'pr') {
+      return matchesSearch && log.action.includes('PR');
+    }
+    if (logActionFilter === 'students') {
+      return matchesSearch && (log.action.includes('STUDENT') || log.action.includes('STUDY_ABROAD'));
+    }
+    return matchesSearch && log.action === logActionFilter;
+  });
+
   const renderPagination = (totalPages) => {
     if (totalPages <= 1) return null;
     return (
@@ -1942,6 +2003,18 @@ const AdminDashboard = ({ onLogout }) => {
             <GraduationCap size={18} style={{ flexShrink: 0 }} />
             <span className="nav-label">Students</span>
           </button>
+          {localStorage.getItem('adminRole') === 'superadmin' && (
+            <button 
+              className={`admin-sidebar-nav-btn ${activeTab === 'activity-logs' ? 'active' : ''}`}
+              onClick={() => {
+                setActiveTab('activity-logs');
+                fetchActivityLogs();
+              }}
+            >
+              <Clock size={18} style={{ flexShrink: 0 }} />
+              <span className="nav-label">Activity Logs</span>
+            </button>
+          )}
         </nav>
 
         <div className="admin-sidebar-footer">
@@ -1979,6 +2052,7 @@ const AdminDashboard = ({ onLogout }) => {
             {activeTab === 'visa-pathways' && 'Visa Pathways & Country Guidance'}
             {activeTab === 'australia-pr' && 'Australia PR Leads'}
             {activeTab === 'students' && 'Students — Study Abroad'}
+            {activeTab === 'activity-logs' && 'Admin Activity Logs'}
           </h2>
 
           <div className="admin-notifications-container" ref={notifDropdownRef}>
@@ -2856,8 +2930,254 @@ const AdminDashboard = ({ onLogout }) => {
               </section>
             </>
           )}
+
+          {activeTab === 'activity-logs' && (
+            <>
+              <section className="admin-controls-card">
+                <div className="admin-search-wrapper">
+                  <Search className="admin-search-icon" size={18} />
+                  <input
+                    type="text"
+                    placeholder="Search logs by admin, details, or action..."
+                    value={logSearchTerm}
+                    onChange={(e) => {
+                      setLogSearchTerm(e.target.value);
+                      setCurrentPage(1);
+                    }}
+                  />
+                </div>
+                
+                <div className="admin-filters">
+                  <CustomSelect
+                    id="log-action-filter"
+                    className="admin-portal-select"
+                    value={logActionFilter}
+                    onChange={(e) => {
+                      setLogActionFilter(e.target.value);
+                      setCurrentPage(1);
+                    }}
+                    placeholder="All Categories"
+                    options={[
+                      { value: '', label: 'All Categories' },
+                      { value: 'auth', label: 'Auth & Session' },
+                      { value: 'emails', label: 'Sent Emails & Invites' },
+                      { value: 'bookings', label: 'Booking Actions' },
+                      { value: 'pr', label: 'PR Leads Actions' },
+                      { value: 'students', label: 'Student Leads Actions' },
+                    ]}
+                  />
+
+                  <button
+                    type="button"
+                    className="admin-action-btn"
+                    onClick={fetchActivityLogs}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: '6px' }}
+                  >
+                    Refresh
+                  </button>
+                </div>
+              </section>
+
+              <section className="admin-table-container">
+                {logsLoading ? (
+                  <div style={{ textAlign: 'center', padding: '40px 0', color: '#64748b' }}>
+                    Loading activities...
+                  </div>
+                ) : filteredLogs.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '40px 0', color: '#64748b' }}>
+                    No activity logs found.
+                  </div>
+                ) : (
+                  <div className="admin-table-wrapper" style={{ overflowX: 'auto' }}>
+                    <table className="admin-table">
+                      <thead>
+                        <tr>
+                          <th>Admin</th>
+                          <th>Action</th>
+                          <th>Description</th>
+                          <th>Date & Time</th>
+                          <th style={{ textAlign: 'right' }}>Details</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredLogs.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage).map((log) => {
+                          const isEmailAction = ['SEND_PR_EMAIL', 'SEND_STUDENT_EMAIL', 'SEND_POST_MEETING_EMAIL', 'SCHEDULE_MEETING', 'REQUEST_PR_REUPLOAD', 'REQUEST_STUDENT_REUPLOAD'].includes(log.action);
+                          return (
+                            <tr key={log._id}>
+                              <td>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                  <div className="admin-sidebar-user-avatar" style={{ width: 32, height: 32, fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#e2e8f0', borderRadius: '50%', overflow: 'hidden' }}>
+                                    {log.admin?.avatar ? (
+                                      <img src={`${API_URL}${log.admin.avatar}`} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                    ) : (
+                                      (log.adminName || log.adminEmail || 'A').charAt(0).toUpperCase()
+                                    )}
+                                  </div>
+                                  <div>
+                                    <div style={{ fontWeight: 600, color: '#1e293b' }}>{log.adminName}</div>
+                                    <div style={{ fontSize: 11, color: '#64748b' }}>{log.adminEmail}</div>
+                                  </div>
+                                </div>
+                              </td>
+                              <td>
+                                <span className={`badge ${
+                                  log.action === 'LOGIN' ? 'status-completed' :
+                                  isEmailAction ? 'status-processing' :
+                                  log.action.includes('DELETE') ? 'pay-pending' : 'status-new'
+                                }`} style={{ textTransform: 'uppercase', fontSize: 11 }}>
+                                  {log.action.replace(/_/g, ' ')}
+                                </span>
+                              </td>
+                              <td>
+                                <div style={{ maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', color: '#334155' }} title={log.details}>
+                                  {log.details}
+                                </div>
+                              </td>
+                              <td>
+                                <div style={{ color: '#475569', fontSize: 13 }}>
+                                  {new Date(log.createdAt).toLocaleDateString([], { month: 'short', day: 'numeric', year: 'numeric' })}
+                                </div>
+                                <div style={{ fontSize: 11, color: '#64748b' }}>
+                                  {new Date(log.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                </div>
+                              </td>
+                              <td style={{ textAlign: 'right' }}>
+                                <button
+                                  type="button"
+                                  className="admin-action-btn"
+                                  style={{ background: '#f1f5f9', color: '#0f172a', border: '1px solid #cbd5e1', padding: '6px 12px', fontSize: '13px' }}
+                                  onClick={() => setSelectedLog(log)}
+                                >
+                                  View
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+                {renderPagination(Math.ceil(filteredLogs.length / itemsPerPage))}
+              </section>
+            </>
+          )}
         </main>
       </div>
+
+      {/* ACTIVITY LOG DETAILS MODAL */}
+      {selectedLog && (
+        <div className="admin-modal-overlay">
+          <div className="admin-modal" style={{ maxWidth: '650px', width: '90%' }}>
+            <div className="admin-modal-header">
+              <div>
+                <h3>Activity Log Details</h3>
+                <p className="pr-lead-modal-subtitle" style={{ textTransform: 'uppercase', fontSize: 11, fontWeight: 700, color: '#0d7c3d', marginTop: 4 }}>
+                  {selectedLog.action.replace(/_/g, ' ')}
+                </p>
+              </div>
+              <button className="admin-modal-close" onClick={() => setSelectedLog(null)}>✕</button>
+            </div>
+            <div className="admin-modal-body" style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+              
+              <div style={{ display: 'flex', gap: '16px', borderBottom: '1px solid #f1f5f9', paddingBottom: '16px' }}>
+                <div className="admin-sidebar-user-avatar" style={{ width: 48, height: 48, fontSize: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#e2e8f0', borderRadius: '50%', overflow: 'hidden' }}>
+                  {selectedLog.admin?.avatar ? (
+                    <img src={`${API_URL}${selectedLog.admin.avatar}`} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                  ) : (
+                    (selectedLog.adminName || selectedLog.adminEmail || 'A').charAt(0).toUpperCase()
+                  )}
+                </div>
+                <div>
+                  <div style={{ fontWeight: 700, fontSize: 16, color: '#1e293b' }}>{selectedLog.adminName}</div>
+                  <div style={{ color: '#64748b', fontSize: 14 }}>{selectedLog.adminEmail}</div>
+                  <div style={{ fontSize: 12, display: 'inline-block', background: '#f1f5f9', padding: '2px 8px', borderRadius: 4, marginTop: 4, fontWeight: 500, color: '#475569', textTransform: 'capitalize' }}>
+                    Role: {selectedLog.admin?.role || 'admin'}
+                  </div>
+                </div>
+              </div>
+
+              <div className="admin-modal-section">
+                <h4 style={{ margin: '0 0 8px 0', color: '#1e293b', fontSize: 14, fontWeight: 600 }}>Description</h4>
+                <p style={{ margin: 0, fontSize: 15, color: '#334155', backgroundColor: '#f8fafc', padding: '12px', borderRadius: '8px', borderLeft: '4px solid #94a3b8', lineHeight: 1.5 }}>
+                  {selectedLog.details}
+                </p>
+              </div>
+
+              {selectedLog.metadata && Object.keys(selectedLog.metadata).length > 0 && (
+                <div className="admin-modal-section">
+                  <h4 style={{ margin: '0 0 8px 0', color: '#1e293b', fontSize: 14, fontWeight: 600 }}>Action Metadata</h4>
+                  
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', backgroundColor: '#f8fafc', padding: '16px', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                    {selectedLog.metadata.email && (
+                      <div style={{ display: 'flex', fontSize: 14 }}><span style={{ fontWeight: 600, width: 140, color: '#475569' }}>To:</span><span style={{ color: '#0f172a' }}>{selectedLog.metadata.email}</span></div>
+                    )}
+                    {selectedLog.metadata.to && (
+                      <div style={{ display: 'flex', fontSize: 14 }}><span style={{ fontWeight: 600, width: 140, color: '#475569' }}>To:</span><span style={{ color: '#0f172a' }}>{selectedLog.metadata.to}</span></div>
+                    )}
+                    {selectedLog.metadata.subject && (
+                      <div style={{ display: 'flex', fontSize: 14 }}><span style={{ fontWeight: 600, width: 140, color: '#475569' }}>Subject:</span><span style={{ color: '#0f172a', fontWeight: 500 }}>{selectedLog.metadata.subject}</span></div>
+                    )}
+                    {selectedLog.metadata.dateTime && (
+                      <div style={{ display: 'flex', fontSize: 14 }}><span style={{ fontWeight: 600, width: 140, color: '#475569' }}>Scheduled:</span><span style={{ color: '#0f172a' }}>{new Date(selectedLog.metadata.dateTime).toLocaleString()}</span></div>
+                    )}
+                    {selectedLog.metadata.link && (
+                      <div style={{ display: 'flex', fontSize: 14 }}><span style={{ fontWeight: 600, width: 140, color: '#475569' }}>Link:</span><a href={selectedLog.metadata.link} target="_blank" rel="noopener noreferrer" style={{ color: '#0d7c3d', textDecoration: 'underline' }}>{selectedLog.metadata.link}</a></div>
+                    )}
+                    {selectedLog.metadata.notes && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: 14, borderTop: '1px solid #e2e8f0', paddingTop: '10px' }}>
+                        <span style={{ fontWeight: 600, color: '#475569' }}>Session Notes:</span>
+                        <p style={{ margin: 0, padding: 8, backgroundColor: '#ffffff', borderRadius: 4, border: '1px solid #f1f5f9', whiteSpace: 'pre-wrap', color: '#334155', lineHeight: 1.4 }}>{selectedLog.metadata.notes}</p>
+                      </div>
+                    )}
+                    {selectedLog.metadata.message && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: 14, borderTop: '1px solid #e2e8f0', paddingTop: '10px' }}>
+                        <span style={{ fontWeight: 600, color: '#475569' }}>Email Message:</span>
+                        <p style={{ margin: 0, padding: 8, backgroundColor: '#ffffff', borderRadius: 4, border: '1px solid #f1f5f9', whiteSpace: 'pre-wrap', color: '#334155', lineHeight: 1.4 }}>{selectedLog.metadata.message}</p>
+                      </div>
+                    )}
+                    {selectedLog.metadata.requestedDocuments && selectedLog.metadata.requestedDocuments.length > 0 && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: 14, borderTop: '1px solid #e2e8f0', paddingTop: '10px' }}>
+                        <span style={{ fontWeight: 600, color: '#475569' }}>Requested Documents:</span>
+                        <ul style={{ margin: 0, paddingLeft: 20, color: '#334155' }}>
+                          {selectedLog.metadata.requestedDocuments.map((doc, i) => (
+                            <li key={i}>{doc}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {selectedLog.metadata.attachments && selectedLog.metadata.attachments.length > 0 && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: 14, borderTop: '1px solid #e2e8f0', paddingTop: '10px' }}>
+                        <span style={{ fontWeight: 600, color: '#475569' }}>Attachments Sent:</span>
+                        <ul style={{ margin: 0, paddingLeft: 20, color: '#334155', fontSize: 13 }}>
+                          {selectedLog.metadata.attachments.map((file, i) => (
+                            <li key={i} style={{ wordBreak: 'break-all' }}>📎 {file}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                    {selectedLog.metadata.emailSent === false && (
+                      <div style={{ display: 'flex', fontSize: 14, color: '#ef4444', borderTop: '1px solid #e2e8f0', paddingTop: '10px' }}>
+                        <span style={{ fontWeight: 600, width: 140 }}>Error:</span>
+                        <span>Email delivery failed ({selectedLog.metadata.emailError || 'unknown error'})</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              <div style={{ fontSize: 12, color: '#94a3b8', borderTop: '1px solid #f1f5f9', paddingTop: '12px', display: 'flex', justifyContent: 'space-between' }}>
+                <span>Log ID: {selectedLog._id}</span>
+                <span>Logged at: {new Date(selectedLog.createdAt).toLocaleString()}</span>
+              </div>
+
+            </div>
+            <div className="admin-modal-header" style={{ borderTop: '1px solid #f1f5f9', borderBottom: 'none', justifyContent: 'flex-end', gap: '10px', padding: '16px 30px' }}>
+              <button type="button" className="admin-action-btn" style={{ background: '#f1f5f9', color: '#0f172a', border: '1px solid #cbd5e1' }} onClick={() => setSelectedLog(null)}>Close</button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* AUSTRALIA PR LEAD MODALS */}
       {selectedPrLead && prModalMode === 'view' && (

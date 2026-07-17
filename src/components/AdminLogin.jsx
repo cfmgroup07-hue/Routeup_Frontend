@@ -32,6 +32,7 @@ const AdminLogin = ({ onLoginSuccess }) => {
       localStorage.setItem('adminToken', data.token);
       localStorage.setItem('adminEmail', data.email);
       localStorage.setItem('adminName', data.name || 'Admin');
+      localStorage.setItem('adminRole', data.role || 'admin');
       if (data.avatar) localStorage.setItem('adminAvatar', data.avatar);
       else localStorage.removeItem('adminAvatar');
       

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import SiteNavbar from './SiteNavbar';
+import SiteFooter from './SiteFooter';
 import {
   STUDY_ABROAD_COUNTRIES,
   STUDY_ABROAD_COUNTRY_EXTRAS,
@@ -150,17 +151,7 @@ const StudyAbroadWhyDocuments = () => {
         </div>
       </section>
 
-      <footer className="pr-footer">
-        <img src="/Routeup Logo.png" alt="RouteUp" className="pr-footer-logo" />
-        <p>Career Advisory &amp; Migration Guidance</p>
-        <div className="pr-footer-links">
-          <Link to="/">Home</Link>
-          <Link to="/study-abroad-documents">Study Abroad Docs</Link>
-          <Link to="/study-abroad-why-documents">Why these docs</Link>
-          <Link to="/#book">Book Session</Link>
-        </div>
-        <p className="pr-footer-copy">© 2026 RouteUp. All rights reserved.</p>
-      </footer>
+      <SiteFooter />
     </div>
   );
 };

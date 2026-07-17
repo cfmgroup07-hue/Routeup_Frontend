@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { Check } from 'lucide-react';
 import SiteNavbar from './SiteNavbar';
+import SiteFooter from './SiteFooter';
 import { API_URL } from '../config';
 import { PR_OCCUPATIONS, findOccupation } from '../data/australiaPrData';
 
@@ -308,17 +309,7 @@ const AustraliaPREligibility = () => {
         </div>
       </section>
 
-      <footer className="pr-footer">
-        <img src="/Routeup Logo.png" alt="RouteUp" className="pr-footer-logo" />
-        <p>Career Advisory & Migration Guidance</p>
-        <div className="pr-footer-links">
-          <Link to="/">Home</Link>
-          <Link to="/apply-australia-pr">Apply Australia PR</Link>
-          <Link to="/australia-pr-eligibility">Eligibility Check</Link>
-          <Link to="/#book">Book Session</Link>
-        </div>
-        <p className="pr-footer-copy">© 2026 RouteUp. All rights reserved.</p>
-      </footer>
+      <SiteFooter />
     </div>
   );
 };
