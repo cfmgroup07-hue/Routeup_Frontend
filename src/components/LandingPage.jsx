@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { io } from 'socket.io-client';
+import toast from 'react-hot-toast';
 import * as Icons from 'lucide-react';
 const { 
   ShieldCheck, Check, AlertTriangle, AlertCircle, FileCheck, 
@@ -221,7 +222,29 @@ const LandingPage = ({ onAdminClick }) => {
 
   const [cvFile, setCvFile] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [paymentStep, setPaymentStep] = useState('none'); // 'none', 'success'
+
+  const resetBookingForm = () => {
+    setFormData({
+      fullName: '',
+      phone: '',
+      email: '',
+      age: '',
+      address: '',
+      education: '',
+      currentStatus: '',
+      skills: '',
+      notes: '',
+      careerIndustry: '',
+      careerJobTitle: '',
+      preferredCountry: '',
+      passport: '',
+      overseasExp: '',
+      placementIndustry: ''
+    });
+    setSelectedServices({});
+    setCvFile(null);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
   useEffect(() => {
     // Fetch Services
@@ -349,12 +372,12 @@ const LandingPage = ({ onAdminClick }) => {
     const required = ['fullName', 'phone', 'email', 'age', 'address', 'education', 'currentStatus'];
     for (const key of required) {
       if (!formData[key]?.trim()) {
-        alert(`Please fill in the required field: ${key}`);
+        toast.error(`Please fill in the required field: ${key}`);
         return false;
       }
     }
     if (selectedCount === 0) {
-      alert('Please select at least one advisory service.');
+      toast.error('Please select at least one advisory service.');
       return false;
     }
     return true;
@@ -376,7 +399,7 @@ const LandingPage = ({ onAdminClick }) => {
 
     const isScriptLoaded = await loadRazorpayScript();
     if (!isScriptLoaded) {
-      alert('Failed to load Razorpay. Please check your internet connection.');
+      toast.error('Failed to load Razorpay. Please check your internet connection.');
       setLoading(false);
       return;
     }
@@ -458,10 +481,11 @@ const LandingPage = ({ onAdminClick }) => {
               throw new Error(err.message || 'Payment verified but booking failed to save.');
             }
 
-            setPaymentStep('success');
+            resetBookingForm();
+            toast.success('Submitted');
           } catch (error) {
             console.error(error);
-            alert(`Error finalizing booking: ${error.message}`);
+            toast.error(`Error finalizing booking: ${error.message}`);
           } finally {
             setLoading(false);
           }
@@ -478,39 +502,15 @@ const LandingPage = ({ onAdminClick }) => {
 
       const rzp = new window.Razorpay(options);
       rzp.on('payment.failed', function (response) {
-        alert(`Payment failed: ${response.error.description}`);
+        toast.error(`Payment failed: ${response.error.description}`);
       });
       rzp.open();
     } catch (error) {
       console.error(error);
-      alert(`Error: ${error.message}`);
+      toast.error(`Error: ${error.message}`);
     } finally {
       setLoading(false);
     }
-  };
-
-  // Reset form and close modal
-  const handleCloseModal = () => {
-    setFormData({
-      fullName: '',
-      phone: '',
-      email: '',
-      age: '',
-      address: '',
-      education: '',
-      currentStatus: '',
-      skills: '',
-      notes: '',
-      careerIndustry: '',
-      careerJobTitle: '',
-      preferredCountry: '',
-      passport: '',
-      overseasExp: '',
-      placementIndustry: ''
-    });
-    setSelectedServices({});
-    setCvFile(null);
-    setPaymentStep('none');
   };
 
   const scrollToForm = () => {
@@ -1155,9 +1155,9 @@ const LandingPage = ({ onAdminClick }) => {
                       <div className="file-upload-input">
                         <Upload size={20} />
                         <span className="file-hint">
-                          {cvFile ? `Selected: ${cvFile.name}` : 'Click or drop PDF, DOC, DOCX - Max 5MB'}
+                          {cvFile ? `Selected: ${cvFile.name}` : 'Click or drop PDF - Max 5MB'}
                         </span>
-                        <input type="file" accept=".pdf,.doc,.docx" onChange={handleFileChange} />
+                        <input type="file" accept=".pdf" onChange={handleFileChange} />
                       </div>
                     </div>
                   </div>
@@ -1210,38 +1210,6 @@ const LandingPage = ({ onAdminClick }) => {
 
       {/* FOOTER */}
       <SiteFooter />
-
-      {/* SUCCESS CONFIRMATION MODAL */}
-      {paymentStep === 'success' && (
-        <div className="modal-overlay">
-          <div className="success-modal">
-            <div className="success-modal-icon">
-              <Check size={36} />
-            </div>
-            <h3>Payment Successful!</h3>
-            <p>
-              Thank you, <strong>{formData.fullName}</strong>! Your payment is complete and your session booking is confirmed.
-            </p>
-            <p>
-              A confirmation email has been sent to <strong>{formData.email}</strong> with your selected session details.
-              Our admin team will connect with you within <strong>24 hours</strong> to schedule your session.
-            </p>
-            {servicesList.filter((service) => selectedServices[service.key]).length > 0 && (
-              <div className="success-selected-sessions">
-                <p className="success-selected-title">Selected Session(s):</p>
-                <ul>
-                  {servicesList
-                    .filter((service) => selectedServices[service.key])
-                    .map((service) => (
-                      <li key={service._id}>{service.title}</li>
-                    ))}
-                </ul>
-              </div>
-            )}
-            <button type="button" className="success-modal-done-btn" onClick={handleCloseModal}>Done</button>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

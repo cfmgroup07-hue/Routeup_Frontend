@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { Check, Plane, Upload } from 'lucide-react';
 import SiteNavbar from './SiteNavbar';
@@ -58,7 +58,6 @@ const emptyForm = () => ({
 });
 
 const ApplyAustraliaPR = () => {
-  const navigate = useNavigate();
   const [origin, setOrigin] = useState('offshore');
   const [country, setCountry] = useState('');
   const [state, setState] = useState('');
@@ -69,6 +68,21 @@ const ApplyAustraliaPR = () => {
   const [selectedFile, setSelectedFile] = useState(null);
   const [uploaded, setUploaded] = useState({});
   const [submitting, setSubmitting] = useState(false);
+  const [formKey, setFormKey] = useState(0);
+
+  const resetForm = () => {
+    setOrigin('offshore');
+    setCountry('');
+    setState('');
+    setOccValue('');
+    setForm(emptyForm());
+    setDocTitle('');
+    setFileName('');
+    setSelectedFile(null);
+    setUploaded({});
+    setFormKey((key) => key + 1);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
   const occupation = useMemo(() => findOccupation(occValue), [occValue]);
 
@@ -233,8 +247,8 @@ const ApplyAustraliaPR = () => {
         throw new Error(err.message || 'Failed to submit');
       }
 
-      toast.success('Application submitted! Redirecting to book your session...');
-      navigate({ pathname: '/', hash: 'book' });
+      toast.success('Submitted');
+      resetForm();
     } catch (error) {
       toast.error(error.message || 'Could not submit. Please try again.');
     } finally {
@@ -286,7 +300,7 @@ const ApplyAustraliaPR = () => {
       </section>
 
       <section className="pr-section">
-        <div className="pr-container">
+        <div className="pr-container" key={formKey}>
           <div className="pr-page-title">
             <Plane size={22} />
             <span>Routeup PR application</span>
@@ -795,6 +809,7 @@ const ApplyAustraliaPR = () => {
                   <label className="pr-file-btn">
                     <input
                       type="file"
+                      accept=".pdf"
                       onChange={(e) => {
                         const file = e.target.files?.[0] || null;
                         setSelectedFile(file);

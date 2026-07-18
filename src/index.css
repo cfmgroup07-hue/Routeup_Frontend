@@ -2158,6 +2158,11 @@ h1, h2, h3, h4, h5, h6 {
   max-width: 170px;
 }
 
+.admin-filters .admin-portal-select.admin-portal-select-country.custom-select-container {
+  min-width: 180px;
+  max-width: 220px;
+}
+
 .admin-portal-select {
   min-width: 150px;
   width: auto;
@@ -2269,6 +2274,168 @@ h1, h2, h3, h4, h5, h6 {
 
 .admin-table tr:hover {
   background: #f8fafc;
+}
+
+.admin-table-container.is-scrollable {
+  overflow-x: auto;
+}
+
+.admin-table.rows-single-line {
+  table-layout: fixed;
+  min-width: 1180px;
+}
+
+.admin-table.rows-single-line th,
+.admin-table.rows-single-line td {
+  white-space: nowrap;
+  vertical-align: middle;
+  padding: 10px 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.admin-table.rows-single-line .admin-table-actions {
+  display: flex;
+  gap: 6px;
+  flex-wrap: nowrap;
+  overflow: visible;
+}
+
+.admin-table-cell-ellipsis {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.admin-table-inline-link {
+  font-size: inherit;
+  color: #0d7c3d;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  font-weight: 600;
+  text-decoration: underline;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  display: inline;
+  vertical-align: bottom;
+}
+
+.admin-table-sep {
+  color: #94a3b8;
+  margin: 0 4px;
+}
+
+.admin-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 20px;
+  border-top: 1px solid #e2e8f0;
+  background: linear-gradient(180deg, #f8fafc 0%, #ffffff 100%);
+  flex-wrap: wrap;
+}
+
+.admin-pagination-summary {
+  margin: 0;
+  font-size: 13px;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.admin-pagination-summary strong {
+  color: #0f172a;
+  font-weight: 700;
+}
+
+.admin-pagination-nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.admin-pagination-pages {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.admin-pagination-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 14px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #0f172a;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: var(--font-body);
+  cursor: pointer;
+  transition: border-color 0.15s ease, color 0.15s ease, background 0.15s ease, box-shadow 0.15s ease;
+}
+
+.admin-pagination-btn:hover:not(:disabled) {
+  border-color: #0d7c3d;
+  color: #0d7c3d;
+  background: #f0faf4;
+  box-shadow: 0 1px 2px rgba(13, 124, 61, 0.08);
+}
+
+.admin-pagination-btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  background: #f1f5f9;
+  color: #94a3b8;
+}
+
+.admin-pagination-page {
+  min-width: 36px;
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid transparent;
+  border-radius: 8px;
+  background: transparent;
+  color: #475569;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: var(--font-body);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.admin-pagination-page:hover {
+  background: #f1f5f9;
+  color: #0f172a;
+}
+
+.admin-pagination-page.is-active {
+  background: #0d7c3d;
+  color: #ffffff;
+  border-color: #0d7c3d;
+  box-shadow: 0 2px 6px rgba(13, 124, 61, 0.25);
+}
+
+.admin-pagination-page.is-active:hover {
+  background: #0a6630;
+  color: #ffffff;
+}
+
+.admin-pagination-ellipsis {
+  min-width: 28px;
+  text-align: center;
+  color: #94a3b8;
+  font-size: 14px;
+  font-weight: 700;
+  user-select: none;
 }
 
 /* Status Badges */
@@ -3495,6 +3662,17 @@ h1, h2, h3, h4, h5, h6 {
   }
   .admin-modal-grid,
   .edit-profile-grid { grid-template-columns: 1fr; }
+  .admin-pagination {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+  .admin-pagination-nav {
+    justify-content: center;
+  }
+  .admin-pagination-summary {
+    text-align: center;
+  }
 }
 
 
@@ -4678,3 +4856,21 @@ h1, h2, h3, h4, h5, h6 {
   transform: translateY(-1px);
 }
 
+@media print {
+  .no-print {
+    display: none !important;
+  }
+
+  .admin-modal-overlay {
+    position: static;
+    background: none;
+    backdrop-filter: none;
+    padding: 0;
+  }
+
+  .admin-sidebar,
+  .admin-topbar,
+  .admin-main-content > :not(.admin-modal-overlay) {
+    display: none !important;
+  }
+}

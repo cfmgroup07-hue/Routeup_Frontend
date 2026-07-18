@@ -2,20 +2,34 @@ import React, { useState, useEffect, useRef } from 'react';
 import { API_URL, SOCKET_URL } from '../config';
 import { io } from 'socket.io-client';
 import toast from 'react-hot-toast';
+import html2pdf from 'html2pdf.js';
 import { 
   Users, DollarSign, Clock, CheckCircle, Search, 
   Filter, LogOut, ArrowRight, Download, Calendar, 
   MapPin, GraduationCap, Briefcase, FileText, Bell,
   Plus, Edit, Trash2, Globe, FileCheck, Eye, Video, UploadCloud,
   Target, Award, Plane, BookOpen, Compass, ChevronLeft, ChevronRight, Mail, Send,
-  Settings, User, Lock, Camera
+  Settings, User, Lock, Camera, Printer
 } from 'lucide-react';
+
 import { CountryList, getCountryFlagCode, getFlagImageUrl } from '../utils/countries';
 import CustomSelect from './CustomSelect';
 import { getAllStudyAbroadDocs } from '../data/studyAbroadData';
 import { UNIVERSAL_DOCS, PR_OCCUPATIONS } from '../data/australiaPrData';
 
+const getImageUrl = (path) => {
+  if (!path) return '';
+  if (path.startsWith('http://') || path.startsWith('https://')) return path;
+  return `${API_URL}${path}`;
+};
+
+const isRemoteFileUrl = (path) => Boolean(path && (path.startsWith('http://') || path.startsWith('https://')));
+const isViewableLeadDocument = (doc) => Boolean(doc?.filePath && isRemoteFileUrl(doc.filePath));
+const countUploadedLeadDocuments = (docs = []) =>
+  docs.filter((doc) => Boolean(String(doc?.filePath || '').trim())).length;
+
 const PR_PATHWAY_LABELS = {
+
   '189': 'Skilled Independent Visa (Subclass 189)',
   '190': 'Skilled Nominated Visa (Subclass 190)',
   unsure: "I'm not sure (Please assess my eligibility)",
@@ -109,6 +123,258 @@ const getPrLeadFieldValue = (lead, field) => {
 const hasPrApplicationData = (lead) =>
   lead.source === 'document-upload' ||
   (lead.applicationDetails && Object.keys(lead.applicationDetails).length > 0);
+
+const LEAD_REPORT_STYLES = `
+  .report-root { font-family: 'Inter', sans-serif; color: #1e293b; line-height: 1.4; padding: 40px; background: #fff; }
+  .header { border-bottom: 2px solid #cbd5e1; padding-bottom: 20px; margin-bottom: 25px; display: flex; justify-content: space-between; align-items: center; }
+  .header h1 { font-size: 24px; color: #0f172a; margin: 0; font-weight: 700; }
+  .header .badge { background: #fef3c7; color: #d97706; padding: 4px 12px; border-radius: 9999px; font-size: 12px; font-weight: 600; text-transform: uppercase; }
+  .header .badge.status-completed { background: #dcfce7; color: #15803d; }
+  .header .badge.status-processing { background: #dbeafe; color: #1d4ed8; }
+  .header .badge.status-new { background: #f3e8ff; color: #7e22ce; }
+  .section { margin-bottom: 25px; page-break-inside: avoid; }
+  .section-title { font-size: 16px; font-weight: 700; color: #0d7c3d; border-bottom: 1px solid #e2e8f0; padding-bottom: 6px; margin-top: 0; margin-bottom: 12px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .item { display: flex; justify-content: space-between; border-bottom: 1px dashed #f1f5f9; padding-bottom: 4px; font-size: 13.5px; }
+  .label { color: #64748b; font-weight: 500; }
+  .val { color: #0f172a; font-weight: 600; text-align: right; }
+  @media print {
+    .report-root { padding: 20px; }
+  }
+`;
+
+const getLeadStatusBadgeClass = (status) => {
+  if (status === 'New') return 'status-new';
+  if (status === 'Contacted') return 'status-processing';
+  if (status === 'Converted') return 'status-completed';
+  return '';
+};
+
+const buildPrLeadReportBody = (lead) => {
+  const contactGrid = `
+    <div class="grid">
+      <div class="item"><span class="label">Name:</span> <span class="val">${lead.name}</span></div>
+      <div class="item"><span class="label">Phone:</span> <span class="val">${lead.phone}</span></div>
+      <div class="item"><span class="label">Email:</span> <span class="val">${lead.email}</span></div>
+      <div class="item"><span class="label">Source:</span> <span class="val">${lead.source === 'document-upload' ? 'Apply Australia PR' : 'Eligibility Check'}</span></div>
+      <div class="item"><span class="label">Payment Status:</span> <span class="val">${lead.paymentStatus || 'Pending'}${lead.amount > 0 ? ` (Rs. ${lead.amount})` : ''}</span></div>
+      ${lead.paymentId ? `<div class="item"><span class="label">Payment ID:</span> <span class="val">${lead.paymentId}</span></div>` : ''}
+      <div class="item"><span class="label">Submitted:</span> <span class="val">${new Date(lead.createdAt).toLocaleString()}</span></div>
+    </div>
+  `;
+
+  const occGrid = `
+    <div class="grid">
+      <div class="item"><span class="label">Occupation:</span> <span class="val">${lead.occupation || '—'}</span></div>
+      <div class="item"><span class="label">ANZSCO:</span> <span class="val">${lead.anzsco || '—'}</span></div>
+      <div class="item"><span class="label">Assessing Body:</span> <span class="val">${lead.assessingBody || '—'}</span></div>
+      <div class="item"><span class="label">Applying From:</span> <span class="val">${lead.origin === 'offshore' ? `Offshore — ${lead.country || 'N/A'}` : `Onshore — ${lead.state || 'N/A'}`}</span></div>
+      ${lead.applicationDetails?.migrationPathway ? `<div class="item"><span class="label">Pathway:</span> <span class="val">${formatPrApplicationValue('migrationPathway', lead.applicationDetails.migrationPathway)}</span></div>` : ''}
+    </div>
+  `;
+
+  let appSectionsHtml = '';
+  if (hasPrApplicationData(lead)) {
+    PR_APPLICATION_SECTIONS.forEach((section) => {
+      const rows = section.fields
+        .map((field) => {
+          const raw = getPrLeadFieldValue(lead, field);
+          const formatted = formatPrApplicationValue(field.key, raw);
+          if (!formatted) return null;
+          return `<div class="item"><span class="label">${field.label}:</span> <span class="val">${formatted}</span></div>`;
+        })
+        .filter(Boolean);
+
+      if (rows.length > 0) {
+        appSectionsHtml += `
+          <div class="section">
+            <h3 class="section-title">${section.title}</h3>
+            <div class="grid">${rows.join('')}</div>
+          </div>
+        `;
+      }
+    });
+  }
+
+  let experienceHtml = '';
+  if (lead.existingExperience) {
+    experienceHtml = `
+      <div class="section">
+        <h3 class="section-title">Existing Experience</h3>
+        <p style="white-space: pre-wrap; font-size: 14px; color: #334155; line-height: 1.5; margin: 0;">${lead.existingExperience}</p>
+      </div>
+    `;
+  }
+
+  let docsHtml = '';
+  const docs = (lead.uploadedDocuments || []).filter((d) => d.filePath);
+  if (docs.length > 0) {
+    docsHtml = `
+      <div class="section">
+        <h3 class="section-title">Uploaded Documents (${docs.length})</h3>
+        <ul style="padding-left: 20px; font-size: 14px; margin: 0;">
+          ${docs.map((d) => `<li><strong>${d.title}:</strong> ${d.fileName || 'View Document'}</li>`).join('')}
+        </ul>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="header">
+      <div>
+        <h1>Australia PR Lead</h1>
+        <p style="margin: 4px 0 0 0; color: #64748b; font-size: 14px;">Report generated on ${new Date().toLocaleString()}</p>
+      </div>
+      <span class="badge ${getLeadStatusBadgeClass(lead.status)}">${lead.status}</span>
+    </div>
+
+    <div class="section">
+      <h3 class="section-title">Contact & Source Information</h3>
+      ${contactGrid}
+    </div>
+
+    <div class="section">
+      <h3 class="section-title">Occupation & Location Details</h3>
+      ${occGrid}
+    </div>
+
+    ${appSectionsHtml}
+    ${experienceHtml}
+    ${docsHtml}
+  `;
+};
+
+const buildStudentLeadReportBody = (lead) => {
+  const contactGrid = `
+    <div class="grid">
+      <div class="item"><span class="label">Name:</span> <span class="val">${lead.name}</span></div>
+      <div class="item"><span class="label">Phone:</span> <span class="val">${lead.phone}</span></div>
+      <div class="item"><span class="label">Email:</span> <span class="val">${lead.email}</span></div>
+      <div class="item"><span class="label">Destination Country:</span> <span class="val">${lead.country}</span></div>
+      <div class="item"><span class="label">Submitted:</span> <span class="val">${new Date(lead.createdAt).toLocaleString()}</span></div>
+    </div>
+  `;
+
+  const academicGrid = `
+    <div class="grid">
+      <div class="item"><span class="label">Applying Course:</span> <span class="val">${lead.applyingCourse}</span></div>
+      <div class="item"><span class="label">Target University:</span> <span class="val">${lead.targetUniversity || '—'}</span></div>
+    </div>
+  `;
+
+  let notesHtml = '';
+  if (lead.adminNotes) {
+    notesHtml = `
+      <div class="section">
+        <h3 class="section-title">Admin Follow-Up Notes</h3>
+        <p style="white-space: pre-wrap; font-size: 14px; color: #334155; line-height: 1.5; margin: 0;">${lead.adminNotes}</p>
+      </div>
+    `;
+  }
+
+  let docsHtml = '';
+  const docs = (lead.uploadedDocuments || []).filter((d) => d.filePath);
+  if (docs.length > 0) {
+    docsHtml = `
+      <div class="section">
+        <h3 class="section-title">Uploaded Documents (${docs.length})</h3>
+        <ul style="padding-left: 20px; font-size: 14px; margin: 0;">
+          ${docs.map((d) => `<li><strong>${d.title}:</strong> ${d.fileName || 'View Document'}</li>`).join('')}
+        </ul>
+      </div>
+    `;
+  }
+
+  return `
+    <div class="header">
+      <div>
+        <h1>Study Abroad Candidate Details</h1>
+        <p style="margin: 4px 0 0 0; color: #64748b; font-size: 14px;">Report generated on ${new Date().toLocaleString()}</p>
+      </div>
+      <span class="badge ${getLeadStatusBadgeClass(lead.status)}">${lead.status}</span>
+    </div>
+
+    <div class="section">
+      <h3 class="section-title">Contact Information</h3>
+      ${contactGrid}
+    </div>
+
+    <div class="section">
+      <h3 class="section-title">Academic & Course Preference</h3>
+      ${academicGrid}
+    </div>
+
+    ${notesHtml}
+    ${docsHtml}
+  `;
+};
+
+const wrapLeadReportDocument = (title, bodyHtml) => `
+  <!DOCTYPE html>
+  <html>
+  <head>
+    <title>${title}</title>
+    <style>
+      body { margin: 0; }
+      ${LEAD_REPORT_STYLES}
+    </style>
+  </head>
+  <body>
+    <div class="report-root">${bodyHtml}</div>
+    <script>
+      window.onload = function() {
+        window.focus();
+        window.print();
+      };
+    </script>
+  </body>
+  </html>
+`;
+
+const printLeadReport = (title, bodyHtml) => {
+  const htmlContent = wrapLeadReportDocument(title, bodyHtml);
+  const iframe = document.createElement('iframe');
+  iframe.setAttribute('style', 'position:fixed;right:0;bottom:0;width:0;height:0;border:0;');
+  document.body.appendChild(iframe);
+
+  const cleanup = () => {
+    if (iframe.parentNode) iframe.parentNode.removeChild(iframe);
+  };
+
+  const iframeWindow = iframe.contentWindow;
+  iframeWindow.document.open();
+  iframeWindow.document.write(htmlContent);
+  iframeWindow.document.close();
+  iframeWindow.onafterprint = cleanup;
+  setTimeout(cleanup, 120000);
+};
+
+const downloadLeadReport = async (bodyHtml, filename) => {
+  const container = document.createElement('div');
+  container.style.cssText = 'position:fixed;left:-10000px;top:0;width:800px;background:#fff;';
+  container.innerHTML = `<style>${LEAD_REPORT_STYLES}</style><div class="report-root">${bodyHtml}</div>`;
+  document.body.appendChild(container);
+
+  try {
+    const reportEl = container.querySelector('.report-root');
+    await html2pdf()
+      .set({
+        margin: [10, 10, 10, 10],
+        filename,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { scale: 2, useCORS: true, logging: false },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+        pagebreak: { mode: ['avoid-all', 'css', 'legacy'] },
+      })
+      .from(reportEl)
+      .save();
+  } finally {
+    document.body.removeChild(container);
+  }
+};
+
+const sanitizeReportFilename = (name) =>
+  name.replace(/[^\w\s-]/g, '').trim().replace(/\s+/g, '-') || 'report';
 
 const renderPrApplicationSections = (lead) =>
   PR_APPLICATION_SECTIONS.map((section) => {
@@ -630,27 +896,134 @@ const AdminDashboard = ({ onLogout }) => {
     setPrMailFiles([]);
   };
 
-  const handlePrDocDownload = async (doc) => {
-    if (!doc?.filePath) return;
+  const syncLeadDocumentPath = (leadType, leadId, title, url) => {
+    const patchDocuments = (documents = []) =>
+      documents.map((doc) => (doc.title === title ? { ...doc, filePath: url } : doc));
+
+    if (leadType === 'student') {
+      setStudentLeads((prev) =>
+        prev.map((lead) =>
+          lead._id === leadId
+            ? { ...lead, uploadedDocuments: patchDocuments(lead.uploadedDocuments) }
+            : lead
+        )
+      );
+      setSelectedStudentLead((prev) =>
+        prev && prev._id === leadId
+          ? { ...prev, uploadedDocuments: patchDocuments(prev.uploadedDocuments) }
+          : prev
+      );
+      return;
+    }
+
+    setPrLeads((prev) =>
+      prev.map((lead) =>
+        lead._id === leadId
+          ? { ...lead, uploadedDocuments: patchDocuments(lead.uploadedDocuments) }
+          : lead
+      )
+    );
+    setSelectedPrLead((prev) =>
+      prev && prev._id === leadId
+        ? { ...prev, uploadedDocuments: patchDocuments(prev.uploadedDocuments) }
+        : prev
+    );
+  };
+
+  const resolveLeadDocumentUrl = async (leadType, leadId, doc, purpose = 'view') => {
+    if (!doc?.filePath) {
+      throw new Error('Document not found');
+    }
+
+    const token = localStorage.getItem('adminToken');
+    const resource = leadType === 'student' ? 'study-abroad-leads' : 'pr-leads';
+    const response = await fetch(
+      `${API_URL}/api/${resource}/${leadId}/document-url?title=${encodeURIComponent(doc.title)}`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      throw new Error(data.message || 'Document unavailable');
+    }
+
+    if (data.url && data.url !== doc.filePath) {
+      syncLeadDocumentPath(leadType, leadId, doc.title, data.url);
+    }
+
+    if (purpose === 'download') {
+      return data.downloadUrl || data.url;
+    }
+
+    return data.viewUrl || data.url;
+  };
+
+  const handleViewLeadDocument = async (leadType, leadId, doc) => {
     try {
-      const response = await fetch(`${API_URL}${doc.filePath}`);
+      const url = await resolveLeadDocumentUrl(leadType, leadId, doc, 'view');
+      window.open(url, '_blank', 'noopener,noreferrer');
+    } catch (error) {
+      toast.error(
+        error.message ||
+          'Could not open document. Enable Cloudinary PDF delivery in Settings → Security, or ask the student to re-upload.'
+      );
+    }
+  };
+
+  const handlePrDocDownload = async (doc) => {
+    if (!doc?.filePath || !selectedPrLead) return;
+    try {
+      const url = await resolveLeadDocumentUrl('pr', selectedPrLead._id, doc, 'download');
+      const response = await fetch(url);
       if (!response.ok) throw new Error('Download failed');
       const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
+      const blobUrl = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
-      link.href = url;
+      link.href = blobUrl;
       link.download = doc.fileName || doc.title || 'document';
       document.body.appendChild(link);
       link.click();
       link.remove();
-      window.URL.revokeObjectURL(url);
+      window.URL.revokeObjectURL(blobUrl);
+    } catch (error) {
+      toast.error(error.message || 'Could not download file');
+    }
+  };
+
+
+  const handlePrintPrLead = () => {
+    if (!selectedPrLead) return;
+    printLeadReport(`Australia PR Lead — ${selectedPrLead.name}`, buildPrLeadReportBody(selectedPrLead));
+  };
+
+  const handleDownloadPrLead = async () => {
+    if (!selectedPrLead) return;
+    try {
+      const safeName = sanitizeReportFilename(selectedPrLead.name);
+      await downloadLeadReport(buildPrLeadReportBody(selectedPrLead), `Australia-PR-Lead-${safeName}.pdf`);
+      toast.success('PDF downloaded');
     } catch {
-      toast.error('Could not download file');
-      window.open(`${API_URL}${doc.filePath}`, '_blank', 'noopener,noreferrer');
+      toast.error('Failed to download PDF');
+    }
+  };
+
+  const handlePrintStudentLead = () => {
+    if (!selectedStudentLead) return;
+    printLeadReport(`Study Abroad Lead — ${selectedStudentLead.name}`, buildStudentLeadReportBody(selectedStudentLead));
+  };
+
+  const handleDownloadStudentLead = async () => {
+    if (!selectedStudentLead) return;
+    try {
+      const safeName = sanitizeReportFilename(selectedStudentLead.name);
+      await downloadLeadReport(buildStudentLeadReportBody(selectedStudentLead), `Study-Abroad-Lead-${safeName}.pdf`);
+      toast.success('PDF downloaded');
+    } catch {
+      toast.error('Failed to download PDF');
     }
   };
 
   const closePrLeadModal = () => {
+
     setSelectedPrLead(null);
     setPrModalMode(null);
     setPrEditData(null);
@@ -996,24 +1369,25 @@ const AdminDashboard = ({ onLogout }) => {
   };
 
   const handleStudentDocDownload = async (doc) => {
-    if (!doc?.filePath) return;
+    if (!doc?.filePath || !selectedStudentLead) return;
     try {
-      const response = await fetch(`${API_URL}${doc.filePath}`);
+      const url = await resolveLeadDocumentUrl('student', selectedStudentLead._id, doc, 'download');
+      const response = await fetch(url);
       if (!response.ok) throw new Error('Download failed');
       const blob = await response.blob();
-      const url = window.URL.createObjectURL(blob);
+      const blobUrl = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
-      link.href = url;
-      link.download = doc.fileName || 'document';
+      link.href = blobUrl;
+      link.download = doc.fileName || doc.title || 'document';
       document.body.appendChild(link);
       link.click();
       link.remove();
-      window.URL.revokeObjectURL(url);
-    } catch {
-      toast.error('Could not download file');
-      window.open(`${API_URL}${doc.filePath}`, '_blank', 'noopener,noreferrer');
+      window.URL.revokeObjectURL(blobUrl);
+    } catch (error) {
+      toast.error(error.message || 'Could not download file');
     }
   };
+
 
   const toggleStudentWrongDoc = (title) => {
     setStudentWrongDocs((prev) =>
@@ -1286,9 +1660,10 @@ const AdminDashboard = ({ onLogout }) => {
         };
         syncAdminProfileLocal(next);
         setProfileForm({ name: next.name, email: next.email });
-        setAvatarPreview(next.avatar ? `${API_URL}${next.avatar}` : '');
+        setAvatarPreview(next.avatar ? getImageUrl(next.avatar) : '');
         return;
       }
+
     } catch {
       /* fall through to cached values */
     }
@@ -1296,8 +1671,9 @@ const AdminDashboard = ({ onLogout }) => {
       name: adminProfile.name || 'Admin',
       email: adminProfile.email || '',
     });
-    setAvatarPreview(adminProfile.avatar ? `${API_URL}${adminProfile.avatar}` : '');
+    setAvatarPreview(adminProfile.avatar ? getImageUrl(adminProfile.avatar) : '');
   };
+
 
   const closeAdminSettings = () => {
     setShowAdminSettings(false);
@@ -1377,8 +1753,9 @@ const AdminDashboard = ({ onLogout }) => {
       setProfileForm({ name: next.name, email: next.email });
       setAvatarFile(null);
       setRemoveAvatar(false);
-      setAvatarPreview(next.avatar ? `${API_URL}${next.avatar}` : '');
+      setAvatarPreview(next.avatar ? getImageUrl(next.avatar) : '');
       toast.success('Profile updated');
+
     } catch {
       toast.error('Error updating profile');
     } finally {
@@ -1532,6 +1909,28 @@ const AdminDashboard = ({ onLogout }) => {
       setVisaPathwaysList(prev => prev.filter(p => p._id !== deletedId));
     });
 
+    socket.on('new_study_abroad_lead', (newLead) => {
+      setStudentLeads((prev) => {
+        if (prev.some((l) => l._id === newLead._id)) return prev;
+        return [newLead, ...prev];
+      });
+      setSocketNotification({
+        title: 'New Study Abroad Lead',
+        message: `${newLead.name} submitted study abroad documents.`,
+        booking: null,
+        openStudents: true,
+      });
+      setTimeout(() => setSocketNotification(null), 8000);
+    });
+
+    socket.on('study_abroad_lead_deleted', (deletedId) => {
+      const id = String(deletedId);
+      setStudentLeads((prev) => prev.filter((l) => String(l._id) !== id));
+      setSelectedStudentLead((current) =>
+        current && String(current._id) === id ? null : current
+      );
+    });
+
     socket.on('study_abroad_lead_updated', (updatedLead) => {
       setStudentLeads((prev) => {
         const exists = prev.some((l) => l._id === updatedLead._id);
@@ -1541,13 +1940,28 @@ const AdminDashboard = ({ onLogout }) => {
       setSelectedStudentLead((current) =>
         current && current._id === updatedLead._id ? updatedLead : current
       );
+    });
+
+    socket.on('new_australia_pr_lead', (newLead) => {
+      setPrLeads((prev) => {
+        if (prev.some((l) => l._id === newLead._id)) return prev;
+        return [newLead, ...prev];
+      });
       setSocketNotification({
-        title: 'Student documents updated',
-        message: `${updatedLead.name} re-uploaded study abroad documents.`,
+        title: 'New Australia PR Lead',
+        message: `${newLead.name} submitted an Australia PR application.`,
         booking: null,
-        openStudents: true,
+        openPrLeads: true,
       });
       setTimeout(() => setSocketNotification(null), 8000);
+    });
+
+    socket.on('australia_pr_lead_deleted', (deletedId) => {
+      const id = String(deletedId);
+      setPrLeads((prev) => prev.filter((l) => String(l._id) !== id));
+      setSelectedPrLead((current) =>
+        current && String(current._id) === id ? null : current
+      );
     });
 
     socket.on('australia_pr_lead_updated', (updatedLead) => {
@@ -1559,18 +1973,22 @@ const AdminDashboard = ({ onLogout }) => {
       setSelectedPrLead((current) =>
         current && current._id === updatedLead._id ? updatedLead : current
       );
-      setSocketNotification({
-        title: 'PR Lead documents updated',
-        message: `${updatedLead.name} re-uploaded Australia PR documents.`,
-        booking: null,
-        openPrLeads: true,
-      });
-      setTimeout(() => setSocketNotification(null), 8000);
     });
 
     socket.on('new_notification', (newNotif) => {
       console.log('Socket new_notification:', newNotif);
       setNotifications((prev) => [newNotif, ...prev]);
+
+      if (newNotif.type === 'document_reupload') {
+        setSocketNotification({
+          title: newNotif.title,
+          message: newNotif.message,
+          booking: null,
+          openStudents: newNotif.link === 'students',
+          openPrLeads: newNotif.link === 'australia-pr',
+        });
+        setTimeout(() => setSocketNotification(null), 8000);
+      }
     });
 
     return () => {
@@ -1843,18 +2261,16 @@ const AdminDashboard = ({ onLogout }) => {
     return matchesSearch;
   });
 
-  // Pagination Logic
-  const currentEnquiries = filteredBookings.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
-  const totalEnquiriesPages = Math.ceil(filteredBookings.length / itemsPerPage);
+  const getPageSlice = (items) => {
+    const totalPages = Math.max(1, Math.ceil(items.length / itemsPerPage) || 1);
+    const page = Math.min(currentPage, totalPages);
+    return items.slice((page - 1) * itemsPerPage, page * itemsPerPage);
+  };
 
-  const currentPayments = completedPaymentsList.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
-  const totalPaymentsPages = Math.ceil(completedPaymentsList.length / itemsPerPage);
-
-  const currentServices = servicesList.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
-  const totalServicesPages = Math.ceil(servicesList.length / itemsPerPage);
-
-  const currentPathways = visaPathwaysList.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
-  const totalPathwaysPages = Math.ceil(visaPathwaysList.length / itemsPerPage);
+  const currentEnquiries = getPageSlice(filteredBookings);
+  const currentPayments = getPageSlice(completedPaymentsList);
+  const currentServices = getPageSlice(servicesList);
+  const currentPathways = getPageSlice(visaPathwaysList);
 
   const filteredPrLeads = prLeads.filter((lead) => {
     const q = prSearchTerm.toLowerCase();
@@ -1869,8 +2285,7 @@ const AdminDashboard = ({ onLogout }) => {
       detailsText.includes(q)
     );
   });
-  const currentPrLeads = filteredPrLeads.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
-  const totalPrLeadsPages = Math.ceil(filteredPrLeads.length / itemsPerPage);
+  const currentPrLeads = getPageSlice(filteredPrLeads);
 
   const studentCountries = [...new Set(studentLeads.map((l) => l.country).filter(Boolean))].sort();
   const filteredStudentLeads = studentLeads.filter((lead) => {
@@ -1885,11 +2300,7 @@ const AdminDashboard = ({ onLogout }) => {
     const matchesCountry = !studentCountryFilter || lead.country === studentCountryFilter;
     return matchesSearch && matchesCountry;
   });
-  const currentStudentLeads = filteredStudentLeads.slice(
-    (currentPage - 1) * itemsPerPage,
-    currentPage * itemsPerPage
-  );
-  const totalStudentLeadsPages = Math.ceil(filteredStudentLeads.length / itemsPerPage);
+  const currentStudentLeads = getPageSlice(filteredStudentLeads);
 
   const filteredLogs = activityLogs.filter(log => {
     const q = logSearchTerm.toLowerCase();
@@ -1918,27 +2329,85 @@ const AdminDashboard = ({ onLogout }) => {
     return matchesSearch && log.action === logActionFilter;
   });
 
-  const renderPagination = (totalPages) => {
-    if (totalPages <= 1) return null;
+  const currentLogs = getPageSlice(filteredLogs);
+
+  const buildPaginationPages = (totalPages, page) => {
+    if (totalPages <= 5) {
+      return Array.from({ length: totalPages }, (_, index) => index + 1);
+    }
+
+    const pages = [];
+    const addPage = (value) => {
+      if (pages[pages.length - 1] !== value) {
+        pages.push(value);
+      }
+    };
+
+    addPage(1);
+    if (page > 3) addPage('…');
+    for (let p = page - 1; p <= page + 1; p += 1) {
+      if (p > 1 && p < totalPages) addPage(p);
+    }
+    if (page < totalPages - 2) addPage('…');
+    addPage(totalPages);
+    return pages;
+  };
+
+  const renderPagination = (totalItems) => {
+    if (totalItems <= 0) return null;
+
+    const totalPages = Math.max(1, Math.ceil(totalItems / itemsPerPage));
+    const safePage = Math.min(currentPage, totalPages);
+    const start = (safePage - 1) * itemsPerPage + 1;
+    const end = Math.min(safePage * itemsPerPage, totalItems);
+    const pages = buildPaginationPages(totalPages, safePage);
+
     return (
-      <div className="pagination-controls" style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', gap: '8px', padding: '16px 20px', borderTop: '1px solid #e2e8f0' }}>
-        <button 
-          onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))}
-          disabled={currentPage === 1}
-          style={{ padding: '6px 12px', border: '1px solid #cbd5e1', borderRadius: '6px', background: currentPage === 1 ? '#f8fafc' : '#ffffff', color: currentPage === 1 ? '#94a3b8' : '#0f172a', cursor: currentPage === 1 ? 'not-allowed' : 'pointer', fontSize: '13px' }}
-        >
-          Previous
-        </button>
-        <span style={{ padding: '6px 12px', fontSize: '13px', fontWeight: 'bold', color: '#475569' }}>
-          Page {currentPage} of {totalPages}
-        </span>
-        <button 
-          onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))}
-          disabled={currentPage === totalPages}
-          style={{ padding: '6px 12px', border: '1px solid #cbd5e1', borderRadius: '6px', background: currentPage === totalPages ? '#f8fafc' : '#ffffff', color: currentPage === totalPages ? '#94a3b8' : '#0f172a', cursor: currentPage === totalPages ? 'not-allowed' : 'pointer', fontSize: '13px' }}
-        >
-          Next
-        </button>
+      <div className="admin-pagination">
+        <p className="admin-pagination-summary">
+          Showing <strong>{start}–{end}</strong> of <strong>{totalItems}</strong>
+        </p>
+        <div className="admin-pagination-nav">
+          <button
+            type="button"
+            className="admin-pagination-btn"
+            onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
+            disabled={safePage === 1}
+            aria-label="Previous page"
+          >
+            <ChevronLeft size={16} />
+            Previous
+          </button>
+          <div className="admin-pagination-pages" role="navigation" aria-label="Pagination">
+            {pages.map((page, index) =>
+              page === '…' ? (
+                <span key={`ellipsis-${index}`} className="admin-pagination-ellipsis">
+                  …
+                </span>
+              ) : (
+                <button
+                  key={page}
+                  type="button"
+                  className={`admin-pagination-page${safePage === page ? ' is-active' : ''}`}
+                  onClick={() => setCurrentPage(page)}
+                  aria-current={safePage === page ? 'page' : undefined}
+                >
+                  {page}
+                </button>
+              )
+            )}
+          </div>
+          <button
+            type="button"
+            className="admin-pagination-btn"
+            onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
+            disabled={safePage === totalPages}
+            aria-label="Next page"
+          >
+            Next
+            <ChevronRight size={16} />
+          </button>
+        </div>
       </div>
     );
   };
@@ -2021,11 +2490,12 @@ const AdminDashboard = ({ onLogout }) => {
           <div className="admin-sidebar-user">
             <div className="admin-sidebar-user-avatar">
               {adminProfile.avatar ? (
-                <img src={`${API_URL}${adminProfile.avatar}`} alt="" />
+                <img src={getImageUrl(adminProfile.avatar)} alt="" />
               ) : (
                 (adminProfile.name || adminProfile.email || 'A').charAt(0).toUpperCase()
               )}
             </div>
+
             <div className="admin-sidebar-user-meta">
               <span className="admin-sidebar-user-name">{adminProfile.name || 'Admin'}</span>
               <span className="admin-sidebar-user-email">{adminProfile.email || '—'}</span>
@@ -2371,7 +2841,7 @@ const AdminDashboard = ({ onLogout }) => {
                     </tbody>
                   </table>
                 )}
-                {renderPagination(totalEnquiriesPages)}
+                {renderPagination(filteredBookings.length)}
               </section>
             </>
           )}
@@ -2464,7 +2934,7 @@ const AdminDashboard = ({ onLogout }) => {
                     </tbody>
                   </table>
                 )}
-                {renderPagination(totalPaymentsPages)}
+                {renderPagination(completedPaymentsList.length)}
               </section>
             </>
           )}
@@ -2521,7 +2991,7 @@ const AdminDashboard = ({ onLogout }) => {
                     </tbody>
                   </table>
                 )}
-                {renderPagination(totalServicesPages)}
+                {renderPagination(servicesList.length)}
               </section>
             </>
           )}
@@ -2589,7 +3059,7 @@ const AdminDashboard = ({ onLogout }) => {
                     </tbody>
                   </table>
                 )}
-                {renderPagination(totalPathwaysPages)}
+                {renderPagination(visaPathwaysList.length)}
               </section>
             </>
           )}
@@ -2612,71 +3082,77 @@ const AdminDashboard = ({ onLogout }) => {
                 </div>
               </section>
 
-              <section className="admin-table-container">
+              <section className="admin-table-container is-scrollable">
                 {prLeadsLoading ? (
                   <div className="no-bookings">Loading Australia PR leads...</div>
                 ) : filteredPrLeads.length === 0 ? (
                   <div className="no-bookings">No Australia PR leads yet</div>
                 ) : (
-                  <table className="admin-table">
+                  <table className="admin-table rows-single-line">
                     <thead>
                       <tr>
-                        <th>Date</th>
-                        <th>Candidate</th>
-                        <th>Contact</th>
-                        <th>Occupation</th>
-                        <th>Pathway</th>
-                        <th>Source</th>
-                        <th>Payment</th>
-                        <th>Docs</th>
-                        <th>Status</th>
-                        <th style={{ width: 200 }}>Actions</th>
+                        <th style={{ width: 88 }}>Date</th>
+                        <th style={{ width: 160 }}>Candidate</th>
+                        <th style={{ width: 200 }}>Contact</th>
+                        <th style={{ width: 150 }}>Occupation</th>
+                        <th style={{ width: 180 }}>Pathway</th>
+                        <th style={{ width: 100 }}>Source</th>
+                        <th style={{ width: 110 }}>Payment</th>
+                        <th style={{ width: 56 }}>Docs</th>
+                        <th style={{ width: 100 }}>Status</th>
+                        <th style={{ width: 148 }}>Actions</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {currentPrLeads.map((lead) => (
+                      {currentPrLeads.map((lead) => {
+                        const pathwayLabel = lead.applicationDetails?.migrationPathway
+                          ? formatPrApplicationValue('migrationPathway', lead.applicationDetails.migrationPathway)
+                          : '—';
+                        const candidateLabel = `${lead.name}${lead.assessingBody ? ` · ${lead.assessingBody}` : ''}`;
+                        const contactLabel = `${lead.phone} · ${lead.email}`;
+                        const occupationLabel = `${lead.occupation}${lead.anzsco ? ` · ANZSCO ${lead.anzsco}` : ''}`;
+
+                        return (
                         <tr key={lead._id}>
-                          <td style={{ whiteSpace: 'nowrap', fontSize: 13 }}>
+                          <td style={{ fontSize: 13 }}>
                             {new Date(lead.createdAt).toLocaleDateString('en-IN', {
                               day: 'numeric',
                               month: 'short',
                               year: '2-digit',
                             })}
                           </td>
-                          <td>
-                            <div style={{ fontWeight: 700, color: '#0f172a' }}>{lead.name}</div>
-                            <div style={{ fontSize: 12, color: '#64748b' }}>
-                              {lead.assessingBody || '—'}
-                            </div>
+                          <td title={candidateLabel}>
+                            <span className="admin-table-cell-ellipsis" style={{ fontWeight: 700, color: '#0f172a' }}>
+                              {lead.name}
+                              {lead.assessingBody ? (
+                                <span style={{ fontWeight: 500, color: '#64748b' }}> · {lead.assessingBody}</span>
+                              ) : null}
+                            </span>
                           </td>
-                          <td>
-                            <div style={{ fontSize: 13 }}>{lead.phone}</div>
-                            <button
-                              type="button"
-                              onClick={() => openPrLeadModal(lead, 'mail')}
-                              title="Compose email"
-                              style={{
-                                fontSize: 12,
-                                color: '#0d7c3d',
-                                background: 'none',
-                                border: 'none',
-                                padding: 0,
-                                cursor: 'pointer',
-                                fontWeight: 600,
-                                textDecoration: 'underline',
-                              }}
-                            >
-                              {lead.email}
-                            </button>
+                          <td title={contactLabel}>
+                            <span className="admin-table-cell-ellipsis">
+                              {lead.phone}
+                              <span className="admin-table-sep">·</span>
+                              <button
+                                type="button"
+                                className="admin-table-inline-link"
+                                onClick={() => openPrLeadModal(lead, 'mail')}
+                                title="Compose email"
+                              >
+                                {lead.email}
+                              </button>
+                            </span>
                           </td>
-                          <td style={{ fontSize: 13, maxWidth: 200 }}>
-                            <div style={{ fontWeight: 600 }}>{lead.occupation}</div>
-                            <div style={{ fontSize: 11, color: '#64748b' }}>ANZSCO {lead.anzsco}</div>
+                          <td title={occupationLabel} style={{ fontSize: 13 }}>
+                            <span className="admin-table-cell-ellipsis">
+                              <span style={{ fontWeight: 600 }}>{lead.occupation}</span>
+                              {lead.anzsco ? (
+                                <span style={{ color: '#64748b' }}> · ANZSCO {lead.anzsco}</span>
+                              ) : null}
+                            </span>
                           </td>
-                          <td style={{ fontSize: 12, maxWidth: 160 }}>
-                            {lead.applicationDetails?.migrationPathway
-                              ? formatPrApplicationValue('migrationPathway', lead.applicationDetails.migrationPathway)
-                              : '—'}
+                          <td title={pathwayLabel} style={{ fontSize: 12 }}>
+                            <span className="admin-table-cell-ellipsis">{pathwayLabel}</span>
                           </td>
                           <td>
                             <span
@@ -2694,14 +3170,12 @@ const AdminDashboard = ({ onLogout }) => {
                             <span className={`badge pay-${(lead.paymentStatus || 'Pending').toLowerCase()}`}>
                               {lead.paymentStatus || 'Pending'}
                             </span>
-                            {lead.amount > 0 && (
-                              <div style={{ fontSize: 11, color: '#64748b', marginTop: 4 }}>
-                                Rs.{lead.amount}
-                              </div>
-                            )}
+                            {lead.amount > 0 ? (
+                              <span style={{ fontSize: 11, color: '#64748b', marginLeft: 6 }}>Rs.{lead.amount}</span>
+                            ) : null}
                           </td>
                           <td style={{ fontWeight: 700, color: '#0f172a' }}>
-                            {(lead.uploadedDocuments || []).length}
+                            {countUploadedLeadDocuments(lead.uploadedDocuments)}
                           </td>
                           <td>
                             <span
@@ -2719,7 +3193,7 @@ const AdminDashboard = ({ onLogout }) => {
                             </span>
                           </td>
                           <td>
-                            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                            <div className="admin-table-actions">
                               <button
                                 className="admin-action-btn icon-only"
                                 title="View"
@@ -2755,11 +3229,12 @@ const AdminDashboard = ({ onLogout }) => {
                             </div>
                           </td>
                         </tr>
-                      ))}
+                        );
+                      })}
                     </tbody>
                   </table>
                 )}
-                {renderPagination(totalPrLeadsPages)}
+                {renderPagination(filteredPrLeads.length)}
               </section>
             </>
           )}
@@ -2776,79 +3251,84 @@ const AdminDashboard = ({ onLogout }) => {
                     onChange={(e) => setStudentSearchTerm(e.target.value)}
                   />
                 </div>
-                <select
-                  value={studentCountryFilter}
-                  onChange={(e) => {
-                    setStudentCountryFilter(e.target.value);
-                    setCurrentPage(1);
-                  }}
-                  style={{
-                    padding: '10px 14px',
-                    borderRadius: 8,
-                    border: '1px solid #e2e8f0',
-                    fontSize: 13,
-                    fontWeight: 600,
-                    color: '#334155',
-                    background: '#fff',
-                    minWidth: 180,
-                  }}
-                >
-                  <option value="">All countries</option>
-                  {studentCountries.map((c) => {
-                    const count = studentLeads.filter((l) => l.country === c).length;
-                    return (
-                      <option key={c} value={c}>
-                        {c} ({count})
-                      </option>
-                    );
-                  })}
-                </select>
-                <div style={{ fontSize: 13, color: '#64748b', fontWeight: 600 }}>
+
+                <div className="admin-filters">
+                  <CustomSelect
+                    id="student-country-filter"
+                    className="admin-portal-select admin-portal-select-country"
+                    value={studentCountryFilter}
+                    onChange={(e) => {
+                      setStudentCountryFilter(e.target.value);
+                      setCurrentPage(1);
+                    }}
+                    placeholder="All countries"
+                    options={[
+                      { value: '', label: 'All countries' },
+                      ...studentCountries.map((c) => ({
+                        value: c,
+                        label: `${c} (${studentLeads.filter((l) => l.country === c).length})`,
+                      })),
+                    ]}
+                  />
+                </div>
+
+                <div style={{ fontSize: 13, color: '#64748b', fontWeight: 600, flexShrink: 0 }}>
                   {filteredStudentLeads.length} student{filteredStudentLeads.length === 1 ? '' : 's'}
                 </div>
               </section>
 
-              <section className="admin-table-container">
+              <section className="admin-table-container is-scrollable">
                 {studentLeadsLoading ? (
                   <div className="no-bookings">Loading student leads...</div>
                 ) : filteredStudentLeads.length === 0 ? (
                   <div className="no-bookings">No study abroad student leads yet</div>
                 ) : (
-                  <table className="admin-table">
+                  <table className="admin-table rows-single-line">
                     <thead>
                       <tr>
-                        <th>Date</th>
-                        <th>Student</th>
-                        <th>Contact</th>
-                        <th>Course</th>
-                        <th>Country</th>
-                        <th>Docs</th>
-                        <th>Status</th>
-                        <th style={{ width: 200 }}>Actions</th>
+                        <th style={{ width: 88 }}>Date</th>
+                        <th style={{ width: 160 }}>Student</th>
+                        <th style={{ width: 200 }}>Contact</th>
+                        <th style={{ width: 180 }}>Course</th>
+                        <th style={{ width: 120 }}>Country</th>
+                        <th style={{ width: 72 }}>Docs</th>
+                        <th style={{ width: 100 }}>Status</th>
+                        <th style={{ width: 148 }}>Actions</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {currentStudentLeads.map((lead) => (
+                      {currentStudentLeads.map((lead) => {
+                        const studentLabel = `${lead.name}${lead.targetUniversity ? ` · ${lead.targetUniversity}` : ''}`;
+                        const contactLabel = `${lead.phone} · ${lead.email}`;
+
+                        return (
                         <tr key={lead._id}>
-                          <td style={{ whiteSpace: 'nowrap', fontSize: 13 }}>
+                          <td style={{ fontSize: 13 }}>
                             {new Date(lead.createdAt).toLocaleDateString('en-IN', {
                               day: 'numeric',
                               month: 'short',
                               year: '2-digit',
                             })}
                           </td>
-                          <td>
-                            <div style={{ fontWeight: 700, color: '#0f172a' }}>{lead.name}</div>
-                            <div style={{ fontSize: 12, color: '#64748b' }}>
-                              {lead.targetUniversity || '—'}
-                            </div>
+                          <td title={studentLabel}>
+                            <span className="admin-table-cell-ellipsis" style={{ fontWeight: 700, color: '#0f172a' }}>
+                              {lead.name}
+                              {lead.targetUniversity ? (
+                                <span style={{ fontWeight: 500, color: '#64748b' }}> · {lead.targetUniversity}</span>
+                              ) : null}
+                            </span>
                           </td>
-                          <td>
-                            <div style={{ fontSize: 13 }}>{lead.phone}</div>
-                            <div style={{ fontSize: 12, color: '#64748b' }}>{lead.email}</div>
+                          <td title={contactLabel}>
+                            <span className="admin-table-cell-ellipsis">
+                              {lead.phone}
+                              <span className="admin-table-sep">·</span>
+                              <span style={{ color: '#64748b' }}>{lead.email}</span>
+                            </span>
                           </td>
-                          <td style={{ fontSize: 13, maxWidth: 180 }}>
-                            <div style={{ fontWeight: 600 }}>{lead.applyingCourse}</div>
+                          <td title={lead.applyingCourse} style={{ fontSize: 13 }}>
+                            <span className="admin-table-cell-ellipsis" style={{ fontWeight: 600 }}>
+                              {lead.applyingCourse}
+                            </span>
                           </td>
                           <td>
                             <span
@@ -2863,7 +3343,7 @@ const AdminDashboard = ({ onLogout }) => {
                             </span>
                           </td>
                           <td style={{ fontWeight: 700 }}>
-                            {(lead.uploadedDocuments || []).length}
+                            {countUploadedLeadDocuments(lead.uploadedDocuments)}
                             {lead.totalRequired ? (
                               <span style={{ fontWeight: 500, color: '#94a3b8', fontSize: 12 }}>
                                 {' '}/ {lead.totalRequired}
@@ -2886,7 +3366,7 @@ const AdminDashboard = ({ onLogout }) => {
                             </span>
                           </td>
                           <td>
-                            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                            <div className="admin-table-actions">
                               <button
                                 className="admin-action-btn icon-only"
                                 title="View"
@@ -2922,11 +3402,12 @@ const AdminDashboard = ({ onLogout }) => {
                             </div>
                           </td>
                         </tr>
-                      ))}
+                        );
+                      })}
                     </tbody>
                   </table>
                 )}
-                {renderPagination(totalStudentLeadsPages)}
+                {renderPagination(filteredStudentLeads.length)}
               </section>
             </>
           )}
@@ -3000,7 +3481,7 @@ const AdminDashboard = ({ onLogout }) => {
                         </tr>
                       </thead>
                       <tbody>
-                        {filteredLogs.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage).map((log) => {
+                        {currentLogs.map((log) => {
                           const isEmailAction = ['SEND_PR_EMAIL', 'SEND_STUDENT_EMAIL', 'SEND_POST_MEETING_EMAIL', 'SCHEDULE_MEETING', 'REQUEST_PR_REUPLOAD', 'REQUEST_STUDENT_REUPLOAD'].includes(log.action);
                           return (
                             <tr key={log._id}>
@@ -3008,11 +3489,12 @@ const AdminDashboard = ({ onLogout }) => {
                                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                                   <div className="admin-sidebar-user-avatar" style={{ width: 32, height: 32, fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#e2e8f0', borderRadius: '50%', overflow: 'hidden' }}>
                                     {log.admin?.avatar ? (
-                                      <img src={`${API_URL}${log.admin.avatar}`} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                      <img src={getImageUrl(log.admin.avatar)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                                     ) : (
                                       (log.adminName || log.adminEmail || 'A').charAt(0).toUpperCase()
                                     )}
                                   </div>
+
                                   <div>
                                     <div style={{ fontWeight: 600, color: '#1e293b' }}>{log.adminName}</div>
                                     <div style={{ fontSize: 11, color: '#64748b' }}>{log.adminEmail}</div>
@@ -3058,7 +3540,7 @@ const AdminDashboard = ({ onLogout }) => {
                     </table>
                   </div>
                 )}
-                {renderPagination(Math.ceil(filteredLogs.length / itemsPerPage))}
+                {renderPagination(filteredLogs.length)}
               </section>
             </>
           )}
@@ -3083,11 +3565,12 @@ const AdminDashboard = ({ onLogout }) => {
               <div style={{ display: 'flex', gap: '16px', borderBottom: '1px solid #f1f5f9', paddingBottom: '16px' }}>
                 <div className="admin-sidebar-user-avatar" style={{ width: 48, height: 48, fontSize: 18, display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: '#e2e8f0', borderRadius: '50%', overflow: 'hidden' }}>
                   {selectedLog.admin?.avatar ? (
-                    <img src={`${API_URL}${selectedLog.admin.avatar}`} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    <img src={getImageUrl(selectedLog.admin.avatar)} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                   ) : (
                     (selectedLog.adminName || selectedLog.adminEmail || 'A').charAt(0).toUpperCase()
                   )}
                 </div>
+
                 <div>
                   <div style={{ fontWeight: 700, fontSize: 16, color: '#1e293b' }}>{selectedLog.adminName}</div>
                   <div style={{ color: '#64748b', fontSize: 14 }}>{selectedLog.adminEmail}</div>
@@ -3183,13 +3666,33 @@ const AdminDashboard = ({ onLogout }) => {
       {selectedPrLead && prModalMode === 'view' && (
         <div className="admin-modal-overlay">
           <div className="admin-modal pr-lead-view-modal">
-            <div className="admin-modal-header">
+            <div className="admin-modal-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
                 <h3>Australia PR Lead</h3>
                 <p className="pr-lead-modal-subtitle">Full application details in review format</p>
               </div>
-              <button className="admin-modal-close" onClick={closePrLeadModal}>✕</button>
+              <div className="no-print" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <button
+                  type="button"
+                  className="pr-doc-btn view"
+                  onClick={handlePrintPrLead}
+                  style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 12px', fontSize: '13px', background: '#0d7c3d', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: '600' }}
+                >
+                  <Printer size={14} /> Print
+                </button>
+                <button
+                  type="button"
+                  className="pr-doc-btn view"
+                  onClick={handleDownloadPrLead}
+                  style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 12px', fontSize: '13px', background: '#2563eb', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: '600' }}
+                >
+                  <Download size={14} /> Download
+                </button>
+                <button className="admin-modal-close no-print" onClick={closePrLeadModal}>✕</button>
+              </div>
             </div>
+
+
             <div className="admin-modal-body">
               <div className="pr-lead-view-banner">
                 <div>
@@ -3293,7 +3796,7 @@ const AdminDashboard = ({ onLogout }) => {
                   Document Checklist
                   {(selectedPrLead.uploadedDocuments || []).length > 0 && (
                     <span style={{ fontWeight: 500, fontSize: 13, color: '#64748b', marginLeft: 8 }}>
-                      ({(selectedPrLead.uploadedDocuments || []).filter((d) => d.filePath).length} uploaded / {(selectedPrLead.uploadedDocuments || []).length} total)
+                      ({countUploadedLeadDocuments(selectedPrLead.uploadedDocuments)} uploaded / {(selectedPrLead.uploadedDocuments || []).length} total)
                     </span>
                   )}
                 </h4>
@@ -3307,8 +3810,10 @@ const AdminDashboard = ({ onLogout }) => {
                         <div className="pr-lead-doc-item student-view-doc-item" key={`${doc.title}-${idx}`}>
                           <div className="student-view-doc-meta">
                             <span className="student-view-doc-title">{doc.title}</span>
-                            {doc.filePath ? (
+                            {isViewableLeadDocument(doc) ? (
                               <span className="badge status-completed" style={{ alignSelf: 'flex-start' }}>Uploaded</span>
+                            ) : doc.needsReupload ? (
+                              <span className="badge pay-pending" style={{ alignSelf: 'flex-start' }}>Re-upload needed</span>
                             ) : (
                               <span className="badge pay-pending" style={{ alignSelf: 'flex-start' }}>Not uploaded</span>
                             )}
@@ -3319,16 +3824,16 @@ const AdminDashboard = ({ onLogout }) => {
                               <span className="student-view-doc-badge">Re-upload requested</span>
                             )}
                           </div>
-                          {doc.filePath ? (
+                          {isViewableLeadDocument(doc) ? (
                             <div className="pr-lead-doc-actions">
-                              <a
+                              <button
+                                type="button"
                                 className="pr-doc-btn view"
-                                href={`${API_URL}${doc.filePath}`}
-                                target="_blank"
-                                rel="noopener noreferrer"
+                                onClick={() => handleViewLeadDocument('pr', selectedPrLead._id, doc)}
                               >
                                 <Eye size={13} /> View
-                              </a>
+                              </button>
+
                               <button
                                 type="button"
                                 className="pr-doc-btn download"
@@ -3568,11 +4073,11 @@ const AdminDashboard = ({ onLogout }) => {
                     <label className="followup-upload-zone">
                       <UploadCloud size={28} />
                       <span className="followup-upload-title">Click to attach files</span>
-                      <span className="followup-upload-hint">PDF, DOC, DOCX, JPG, PNG — up to 10 files, 10MB each</span>
+                      <span className="followup-upload-hint">PDF only — up to 10 files, 10MB each</span>
                       <input
                         type="file"
                         multiple
-                        accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.webp"
+                        accept=".pdf"
                         onChange={(e) => {
                           const selected = Array.from(e.target.files || []);
                           setPrMailFiles((prev) => [...prev, ...selected].slice(0, 10));
@@ -3768,7 +4273,7 @@ const AdminDashboard = ({ onLogout }) => {
                       {selectedBooking.placementDetails?.cvPath ? (
                         <div className="detail-item" style={{ marginTop: '6px' }}>
                           <a 
-                            href={`${API_URL}${selectedBooking.placementDetails.cvPath}`} 
+                            href={getImageUrl(selectedBooking.placementDetails.cvPath)} 
                             target="_blank" 
                             rel="noreferrer" 
                             className="cv-download-link"
@@ -3776,6 +4281,7 @@ const AdminDashboard = ({ onLogout }) => {
                             <Download size={14} /> Download CV Resume
                           </a>
                         </div>
+
                       ) : (
                         <div style={{ fontSize: '12px', color: '#ef4444', marginTop: '6px' }}>No CV document uploaded</div>
                       )}
@@ -4193,12 +4699,12 @@ const AdminDashboard = ({ onLogout }) => {
                   <label className="followup-upload-zone">
                     <UploadCloud size={28} />
                     <span className="followup-upload-title">Click to upload multiple files</span>
-                    <span className="followup-upload-hint">PDF, DOC, DOCX — up to 10 files, 5MB each</span>
+                    <span className="followup-upload-hint">PDF only — up to 10 files, 5MB each</span>
                     <input 
                       type="file"
                       multiple
                       onChange={handlePostMeetingFilesChange}
-                      accept=".pdf,.doc,.docx"
+                      accept=".pdf"
                     />
                   </label>
 
@@ -4346,13 +4852,33 @@ const AdminDashboard = ({ onLogout }) => {
       {selectedStudentLead && studentModalMode === 'view' && (
         <div className="admin-modal-overlay">
           <div className="admin-modal student-view-modal">
-            <div className="admin-modal-header">
+            <div className="admin-modal-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <div>
                 <h3>Student — Study Abroad</h3>
                 <p className="pr-lead-modal-subtitle">{selectedStudentLead.country}</p>
               </div>
-              <button className="admin-modal-close" onClick={closeStudentLeadModal}>✕</button>
+              <div className="no-print" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <button
+                  type="button"
+                  className="pr-doc-btn view"
+                  onClick={handlePrintStudentLead}
+                  style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 12px', fontSize: '13px', background: '#0d7c3d', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: '600' }}
+                >
+                  <Printer size={14} /> Print
+                </button>
+                <button
+                  type="button"
+                  className="pr-doc-btn view"
+                  onClick={handleDownloadStudentLead}
+                  style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 12px', fontSize: '13px', background: '#2563eb', color: '#fff', border: 'none', borderRadius: '4px', cursor: 'pointer', fontWeight: '600' }}
+                >
+                  <Download size={14} /> Download
+                </button>
+                <button className="admin-modal-close no-print" onClick={closeStudentLeadModal}>✕</button>
+              </div>
             </div>
+
+
             <div className="admin-modal-body">
               <div className="pr-lead-view-banner">
                 <div>
@@ -4396,13 +4922,13 @@ const AdminDashboard = ({ onLogout }) => {
               )}
 
               <div className="admin-modal-section student-view-docs">
-                <h4>Uploaded Documents ({(selectedStudentLead.uploadedDocuments || []).filter((d) => d.filePath).length})</h4>
-                {(selectedStudentLead.uploadedDocuments || []).filter((doc) => doc.filePath).length === 0 ? (
+                <h4>Uploaded Documents ({countUploadedLeadDocuments(selectedStudentLead.uploadedDocuments)})</h4>
+                {(selectedStudentLead.uploadedDocuments || []).filter((doc) => isViewableLeadDocument(doc) || doc.needsReupload).length === 0 ? (
                   <p className="student-reupload-empty">No documents attached</p>
                 ) : (
                   <div className="pr-lead-doc-list">
                     {selectedStudentLead.uploadedDocuments
-                      .filter((doc) => doc.filePath)
+                      .filter((doc) => isViewableLeadDocument(doc) || doc.needsReupload)
                       .map((doc, idx) => (
                       <div className="pr-lead-doc-item student-view-doc-item" key={`${doc.title}-${idx}`}>
                         <div className="student-view-doc-meta">
@@ -4412,16 +4938,16 @@ const AdminDashboard = ({ onLogout }) => {
                             <span className="student-view-doc-badge">Re-upload requested</span>
                           )}
                         </div>
-                        {doc.filePath ? (
+                        {isViewableLeadDocument(doc) ? (
                           <div className="pr-lead-doc-actions">
-                            <a
+                            <button
+                              type="button"
                               className="pr-doc-btn view"
-                              href={`${API_URL}${doc.filePath}`}
-                              target="_blank"
-                              rel="noopener noreferrer"
+                              onClick={() => handleViewLeadDocument('student', selectedStudentLead._id, doc)}
                             >
                               <Eye size={13} /> View
-                            </a>
+                            </button>
+
                             <button
                               type="button"
                               className="pr-doc-btn download"
@@ -4638,11 +5164,11 @@ const AdminDashboard = ({ onLogout }) => {
                     <label className="followup-upload-zone">
                       <UploadCloud size={28} />
                       <span className="followup-upload-title">Click to attach files</span>
-                      <span className="followup-upload-hint">PDF, DOC, DOCX, JPG, PNG — up to 10 files, 10MB each</span>
+                      <span className="followup-upload-hint">PDF only — up to 10 files, 10MB each</span>
                       <input
                         type="file"
                         multiple
-                        accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.webp"
+                        accept=".pdf"
                         onChange={(e) => {
                           const selected = Array.from(e.target.files || []);
                           setStudentMailFiles((prev) => [...prev, ...selected].slice(0, 10));

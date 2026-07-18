@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { Check, Upload } from 'lucide-react';
 import SiteNavbar from './SiteNavbar';
@@ -15,7 +15,6 @@ const MAX_FILE_BYTES = 10 * 1024 * 1024;
 const MAX_TOTAL_BYTES = 100 * 1024 * 1024;
 
 const StudyAbroadDocuments = () => {
-  const navigate = useNavigate();
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
@@ -27,6 +26,22 @@ const StudyAbroadDocuments = () => {
   const [selectedFile, setSelectedFile] = useState(null);
   const [uploaded, setUploaded] = useState({});
   const [submitting, setSubmitting] = useState(false);
+  const [formKey, setFormKey] = useState(0);
+
+  const resetForm = () => {
+    setName('');
+    setPhone('');
+    setEmail('');
+    setCourse('');
+    setUniversity('');
+    setCountry('');
+    setDocTitle('');
+    setFileName('');
+    setSelectedFile(null);
+    setUploaded({});
+    setFormKey((key) => key + 1);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
 
   const sections = useMemo(() => getStudyAbroadSections(country), [country]);
   const allDocs = useMemo(() => getAllStudyAbroadDocs(country), [country]);
@@ -130,8 +145,8 @@ const StudyAbroadDocuments = () => {
         throw new Error(err.message || 'Failed to submit');
       }
 
-      toast.success('Documents saved! Continue to book your session.');
-      navigate({ pathname: '/', hash: 'book' });
+      toast.success('Submitted');
+      resetForm();
     } catch (error) {
       toast.error(error.message || 'Could not submit. Please try again.');
     } finally {
@@ -168,7 +183,7 @@ const StudyAbroadDocuments = () => {
       </section>
 
       <section className="pr-section">
-        <div className="pr-container">
+        <div className="pr-container" key={formKey}>
           <div className="pr-card">
             <h3 className="pr-card-title">Student details</h3>
             <div className="pr-form-row">
@@ -273,6 +288,7 @@ const StudyAbroadDocuments = () => {
                   <label className="pr-file-btn">
                     <input
                       type="file"
+                      accept=".pdf"
                       onChange={(e) => {
                         const file = e.target.files?.[0] || null;
                         setSelectedFile(file);
