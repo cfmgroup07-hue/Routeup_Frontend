@@ -1,15 +1,26 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { Menu, X } from 'lucide-react';
+import { ChevronDown, Menu, X } from 'lucide-react';
+
+const STUDY_ABROAD_LINKS = [
+  { to: '/study-abroad-documents', label: 'Upload Documents', activeKey: 'study-abroad' },
+  { to: '/study-abroad-guides', label: 'Free Guides', activeKey: 'study-abroad-guides' },
+  { to: '/study-abroad-why-documents', label: 'Why Documents Matter', activeKey: 'study-abroad-why' },
+];
 
 const SiteNavbar = ({ active = '' }) => {
   const location = useLocation();
   const navigate = useNavigate();
   const isHome = location.pathname === '/';
   const [menuOpen, setMenuOpen] = useState(false);
+  const [studyOpen, setStudyOpen] = useState(false);
+  const studyRef = useRef(null);
+
+  const studyActive = STUDY_ABROAD_LINKS.some((item) => item.activeKey === active);
 
   useEffect(() => {
     setMenuOpen(false);
+    setStudyOpen(false);
   }, [location.pathname, location.hash]);
 
   useEffect(() => {
@@ -19,7 +30,23 @@ const SiteNavbar = ({ active = '' }) => {
     };
   }, [menuOpen]);
 
-  const closeMenu = () => setMenuOpen(false);
+  useEffect(() => {
+    if (!studyOpen) return undefined;
+
+    const onPointerDown = (event) => {
+      if (studyRef.current && !studyRef.current.contains(event.target)) {
+        setStudyOpen(false);
+      }
+    };
+
+    document.addEventListener('pointerdown', onPointerDown);
+    return () => document.removeEventListener('pointerdown', onPointerDown);
+  }, [studyOpen]);
+
+  const closeMenu = () => {
+    setMenuOpen(false);
+    setStudyOpen(false);
+  };
 
   const goHomeSection = (hash) => {
     closeMenu();
@@ -52,13 +79,35 @@ const SiteNavbar = ({ active = '' }) => {
         <button type="button" onClick={() => goHomeSection('#about')}>About Us</button>
         <button type="button" onClick={() => goHomeSection('#services')}>Services</button>
         <button type="button" onClick={() => goHomeSection('#education')}>Visa Guide</button>
-        <Link
-          to="/study-abroad-documents"
-          className={active === 'study-abroad' ? 'nav-active' : ''}
-          onClick={closeMenu}
+
+        <div
+          className={`nav-dropdown${studyOpen ? ' open' : ''}${studyActive ? ' active' : ''}`}
+          ref={studyRef}
         >
-          Study Abroad
-        </Link>
+          <button
+            type="button"
+            className={`nav-dropdown-trigger${studyActive ? ' nav-active' : ''}`}
+            aria-expanded={studyOpen}
+            aria-haspopup="true"
+            onClick={() => setStudyOpen((open) => !open)}
+          >
+            Study Abroad
+            <ChevronDown size={16} className={`nav-dropdown-chevron${studyOpen ? ' open' : ''}`} />
+          </button>
+          <div className="nav-dropdown-menu">
+            {STUDY_ABROAD_LINKS.map((item) => (
+              <Link
+                key={item.to}
+                to={item.to}
+                className={active === item.activeKey ? 'nav-active' : ''}
+                onClick={closeMenu}
+              >
+                {item.label}
+              </Link>
+            ))}
+          </div>
+        </div>
+
         <Link
           to="/apply-australia-pr"
           className={active === 'australia-pr' ? 'nav-active' : ''}

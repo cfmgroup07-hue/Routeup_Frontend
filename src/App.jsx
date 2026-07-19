@@ -8,6 +8,7 @@ import ApplyAustraliaPR from './components/ApplyAustraliaPR';
 import AustraliaPREligibility from './components/AustraliaPREligibility';
 import StudyAbroadDocuments from './components/StudyAbroadDocuments';
 import StudyAbroadWhyDocuments from './components/StudyAbroadWhyDocuments';
+import StudyAbroadGuides from './components/StudyAbroadGuides';
 import StudyAbroadReupload from './components/StudyAbroadReupload';
 import AustraliaPRReupload from './components/AustraliaPRReupload';
 import BallotVisaAwareness from './components/BallotVisaAwareness';
@@ -94,6 +95,7 @@ function App() {
         {/* Study Abroad tools */}
         <Route path="/study-abroad-documents" element={<StudyAbroadDocuments />} />
         <Route path="/study-abroad-why-documents" element={<StudyAbroadWhyDocuments />} />
+        <Route path="/study-abroad-guides" element={<StudyAbroadGuides />} />
         <Route path="/study-abroad-reupload/:token" element={<StudyAbroadReupload />} />
 
         {/* Fallback to home */}
