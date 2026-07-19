@@ -73,10 +73,25 @@ const StudyAbroadReupload = () => {
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.message || 'Upload failed');
 
-      toast.success('Submitted');
       setFiles({});
       setInputKey((key) => key + 1);
-      await loadReuploadInfo({ silent: true });
+      setError('');
+
+      if (data.completed) {
+        setInfo({
+          name: data.name || info.name,
+          country: data.country || info.country,
+          applyingCourse: data.applyingCourse || info.applyingCourse,
+          completed: true,
+          documents: [],
+          message:
+            data.message ||
+            'Thank you! Your documents have been submitted successfully. Our team will review them shortly.',
+        });
+      } else {
+        toast.success(data.message || 'Documents updated');
+        await loadReuploadInfo({ silent: true });
+      }
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (err) {
       toast.error(err.message || 'Could not update documents');
@@ -117,11 +132,19 @@ const StudyAbroadReupload = () => {
           {!loading && !error && info && (
             <>
               {info.completed ? (
-                <div className="pr-card">
-                  <h3 className="pr-card-title">All done</h3>
-                  <p style={{ color: '#64748b', lineHeight: 1.6 }}>
-                    {info.message || 'All requested documents have been submitted. Thank you!'}
+                <div className="pr-card" style={{ textAlign: 'center', padding: '36px 28px' }}>
+                  <h3 className="pr-card-title" style={{ marginBottom: 12 }}>Thank you!</h3>
+                  <p style={{ color: '#64748b', lineHeight: 1.6, marginBottom: 24 }}>
+                    {info.message ||
+                      'Your documents have been submitted successfully. Our team will review them shortly.'}
                   </p>
+                  <Link
+                    to="/"
+                    className="pr-submit-btn"
+                    style={{ display: 'inline-block', textDecoration: 'none', maxWidth: 240 }}
+                  >
+                    Back to Home
+                  </Link>
                 </div>
               ) : (
               <>
@@ -158,17 +181,18 @@ const StudyAbroadReupload = () => {
                         )}
                       </span>
                     </div>
-                    <label className="pr-file-btn" style={{ width: '100%', maxWidth: '100%' }}>
+                    <label className={`pr-file-btn pr-file-btn--block${chosen ? ' has-file' : ''}`}>
                       <input
                         key={`${inputKey}-${doc.title}`}
                         type="file"
-                        accept=".pdf"
+                        accept=".pdf,.doc,.docx,.jpg,.jpeg,.png,.webp"
                         onChange={(e) => {
                           const file = e.target.files?.[0] || null;
                           setFiles((prev) => ({ ...prev, [doc.title]: file }));
                         }}
                       />
-                      {chosen?.name || (doc.currentFileName ? 'Choose new file *' : 'Choose file *')}
+                      <Upload size={18} />
+                      <span>{chosen?.name || (doc.currentFileName ? 'Choose new file *' : 'Choose file *')}</span>
                     </label>
                   </div>
                   );

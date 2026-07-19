@@ -3093,7 +3093,7 @@ const AdminDashboard = ({ onLogout }) => {
                       <tr>
                         <th style={{ width: 88 }}>Date</th>
                         <th style={{ width: 160 }}>Candidate</th>
-                        <th style={{ width: 200 }}>Contact</th>
+                        <th style={{ width: 120 }}>Contact</th>
                         <th style={{ width: 150 }}>Occupation</th>
                         <th style={{ width: 180 }}>Pathway</th>
                         <th style={{ width: 100 }}>Source</th>

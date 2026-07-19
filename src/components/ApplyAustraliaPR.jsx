@@ -146,6 +146,8 @@ const ApplyAustraliaPR = () => {
     toast.success(`${docTitle} added`);
   };
 
+  const hasPartnerStatus = ['Married', 'De facto'].includes(form.maritalStatus);
+
   const validateForm = () => {
     const required = [
       ['fullName', 'Full Name'],
@@ -162,7 +164,6 @@ const ApplyAustraliaPR = () => {
       ['countryOfStudy', 'Country of Study'],
       ['graduationYear', 'Graduation Year'],
       ['englishTestCompleted', 'English test completion status'],
-      ['partnerMigrating', 'Partner migration intent'],
       ['skillsAssessmentCompleted', 'Skills Assessment status'],
     ];
 
@@ -171,6 +172,11 @@ const ApplyAustraliaPR = () => {
         toast.error(`Please fill in: ${label}`);
         return false;
       }
+    }
+
+    if (hasPartnerStatus && !String(form.partnerMigrating || '').trim()) {
+      toast.error('Please answer: Does your partner intend to migrate with you?');
+      return false;
     }
 
     if (form.englishTestCompleted === 'yes') {
@@ -478,7 +484,21 @@ const ApplyAustraliaPR = () => {
                       <select
                         className="pr-select"
                         value={form.maritalStatus}
-                        onChange={(e) => updateForm('maritalStatus', e.target.value)}
+                        onChange={(e) => {
+                          const status = e.target.value;
+                          setForm((prev) => ({
+                            ...prev,
+                            maritalStatus: status,
+                            ...(!['Married', 'De facto'].includes(status)
+                              ? {
+                                  partnerMigrating: '',
+                                  partnerOccupation: '',
+                                  partnerEnglishTest: '',
+                                  partnerQualification: '',
+                                }
+                              : null),
+                          }));
+                        }}
                       >
                         <option value="">Select status</option>
                         {MARITAL_OPTIONS.map((s) => (
@@ -653,49 +673,53 @@ const ApplyAustraliaPR = () => {
                   )}
                 </div>
 
-                {/* Partner Details */}
-                <div className="pr-form-section">
-                  <h4 className="pr-form-section-title">Partner Details (if applicable)</h4>
-                  <p className="pr-form-hint">Does your partner intend to migrate with you?</p>
-                  <RadioGroup
-                    name="partnerMigrating"
-                    options={[{ value: 'yes', label: 'Yes' }, { value: 'no', label: 'No' }]}
-                    value={form.partnerMigrating}
-                    onChange={(v) => updateForm('partnerMigrating', v)}
-                  />
+                {/* Partner Details — only when Married / De facto */}
+                {hasPartnerStatus && (
+                  <div className="pr-form-section">
+                    <h4 className="pr-form-section-title">Partner Details</h4>
+                    <p className="pr-form-hint">
+                      Does your partner intend to migrate with you? <span className="req">*</span>
+                    </p>
+                    <RadioGroup
+                      name="partnerMigrating"
+                      options={[{ value: 'yes', label: 'Yes' }, { value: 'no', label: 'No' }]}
+                      value={form.partnerMigrating}
+                      onChange={(v) => updateForm('partnerMigrating', v)}
+                    />
 
-                  {form.partnerMigrating === 'yes' && (
-                    <div className="pr-conditional-block">
-                      <div className="pr-form-row">
-                        <div className="pr-form-group">
-                          <label>Partner&apos;s Occupation</label>
-                          <input
-                            type="text"
-                            value={form.partnerOccupation}
-                            onChange={(e) => updateForm('partnerOccupation', e.target.value)}
-                          />
+                    {form.partnerMigrating === 'yes' && (
+                      <div className="pr-conditional-block">
+                        <div className="pr-form-row">
+                          <div className="pr-form-group">
+                            <label>Partner&apos;s Occupation</label>
+                            <input
+                              type="text"
+                              value={form.partnerOccupation}
+                              onChange={(e) => updateForm('partnerOccupation', e.target.value)}
+                            />
+                          </div>
+                          <div className="pr-form-group">
+                            <label>Partner&apos;s English Test</label>
+                            <input
+                              type="text"
+                              value={form.partnerEnglishTest}
+                              onChange={(e) => updateForm('partnerEnglishTest', e.target.value)}
+                              placeholder="e.g. IELTS 7.0"
+                            />
+                          </div>
                         </div>
                         <div className="pr-form-group">
-                          <label>Partner&apos;s English Test</label>
+                          <label>Partner&apos;s Qualification</label>
                           <input
                             type="text"
-                            value={form.partnerEnglishTest}
-                            onChange={(e) => updateForm('partnerEnglishTest', e.target.value)}
-                            placeholder="e.g. IELTS 7.0"
+                            value={form.partnerQualification}
+                            onChange={(e) => updateForm('partnerQualification', e.target.value)}
                           />
                         </div>
                       </div>
-                      <div className="pr-form-group">
-                        <label>Partner&apos;s Qualification</label>
-                        <input
-                          type="text"
-                          value={form.partnerQualification}
-                          onChange={(e) => updateForm('partnerQualification', e.target.value)}
-                        />
-                      </div>
-                    </div>
-                  )}
-                </div>
+                    )}
+                  </div>
+                )}
 
                 {/* Skills Assessment */}
                 <div className="pr-form-section">
