@@ -972,9 +972,15 @@ const AdminDashboard = ({ onLogout }) => {
   const handlePrDocDownload = async (doc) => {
     if (!doc?.filePath || !selectedPrLead) return;
     try {
-      const url = await resolveLeadDocumentUrl('pr', selectedPrLead._id, doc, 'download');
-      const response = await fetch(url);
-      if (!response.ok) throw new Error('Download failed');
+      const token = localStorage.getItem('adminToken');
+      const response = await fetch(
+        `${API_URL}/api/pr-leads/${selectedPrLead._id}/document-download?title=${encodeURIComponent(doc.title)}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.message || 'Download failed');
+      }
       const blob = await response.blob();
       const blobUrl = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
@@ -1371,9 +1377,15 @@ const AdminDashboard = ({ onLogout }) => {
   const handleStudentDocDownload = async (doc) => {
     if (!doc?.filePath || !selectedStudentLead) return;
     try {
-      const url = await resolveLeadDocumentUrl('student', selectedStudentLead._id, doc, 'download');
-      const response = await fetch(url);
-      if (!response.ok) throw new Error('Download failed');
+      const token = localStorage.getItem('adminToken');
+      const response = await fetch(
+        `${API_URL}/api/study-abroad-leads/${selectedStudentLead._id}/document-download?title=${encodeURIComponent(doc.title)}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.message || 'Download failed');
+      }
       const blob = await response.blob();
       const blobUrl = window.URL.createObjectURL(blob);
       const link = document.createElement('a');
