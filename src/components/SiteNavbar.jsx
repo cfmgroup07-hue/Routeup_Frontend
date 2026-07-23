@@ -6,6 +6,16 @@ const STUDY_ABROAD_LINKS = [
   { to: '/study-abroad-documents', label: 'Upload Documents', activeKey: 'study-abroad' },
   { to: '/study-abroad-guides', label: 'Free Guides', activeKey: 'study-abroad-guides' },
   { to: '/study-abroad-why-documents', label: 'Why Documents Matter', activeKey: 'study-abroad-why' },
+  {
+    to: '/universities-scholarships',
+    label: 'Universities & Scholarships',
+    activeKey: 'universities-scholarships',
+  },
+];
+
+const VISA_GUIDES_LINKS = [
+  { to: '/visa-free-guides', label: 'Free Guides', activeKey: 'visa-free-guides' },
+  { to: '/ballot-visa-awareness', label: 'Ballot Visa Awareness', activeKey: 'ballot-awareness' },
 ];
 
 const SiteNavbar = ({ active = '' }) => {
@@ -14,13 +24,17 @@ const SiteNavbar = ({ active = '' }) => {
   const isHome = location.pathname === '/';
   const [menuOpen, setMenuOpen] = useState(false);
   const [studyOpen, setStudyOpen] = useState(false);
+  const [visaOpen, setVisaOpen] = useState(false);
   const studyRef = useRef(null);
+  const visaRef = useRef(null);
 
   const studyActive = STUDY_ABROAD_LINKS.some((item) => item.activeKey === active);
+  const visaActive = VISA_GUIDES_LINKS.some((item) => item.activeKey === active);
 
   useEffect(() => {
     setMenuOpen(false);
     setStudyOpen(false);
+    setVisaOpen(false);
   }, [location.pathname, location.hash]);
 
   useEffect(() => {
@@ -31,21 +45,25 @@ const SiteNavbar = ({ active = '' }) => {
   }, [menuOpen]);
 
   useEffect(() => {
-    if (!studyOpen) return undefined;
+    if (!studyOpen && !visaOpen) return undefined;
 
     const onPointerDown = (event) => {
-      if (studyRef.current && !studyRef.current.contains(event.target)) {
+      if (studyOpen && studyRef.current && !studyRef.current.contains(event.target)) {
         setStudyOpen(false);
+      }
+      if (visaOpen && visaRef.current && !visaRef.current.contains(event.target)) {
+        setVisaOpen(false);
       }
     };
 
     document.addEventListener('pointerdown', onPointerDown);
     return () => document.removeEventListener('pointerdown', onPointerDown);
-  }, [studyOpen]);
+  }, [studyOpen, visaOpen]);
 
   const closeMenu = () => {
     setMenuOpen(false);
     setStudyOpen(false);
+    setVisaOpen(false);
   };
 
   const goHomeSection = (hash) => {
@@ -89,7 +107,10 @@ const SiteNavbar = ({ active = '' }) => {
             className={`nav-dropdown-trigger${studyActive ? ' nav-active' : ''}`}
             aria-expanded={studyOpen}
             aria-haspopup="true"
-            onClick={() => setStudyOpen((open) => !open)}
+            onClick={() => {
+              setStudyOpen((open) => !open);
+              setVisaOpen(false);
+            }}
           >
             Study Abroad
             <ChevronDown size={16} className={`nav-dropdown-chevron${studyOpen ? ' open' : ''}`} />
@@ -115,13 +136,38 @@ const SiteNavbar = ({ active = '' }) => {
         >
           Apply Australia PR
         </Link>
-        <Link
-          to="/ballot-visa-awareness"
-          className={active === 'ballot-awareness' ? 'nav-active' : ''}
-          onClick={closeMenu}
+
+        <div
+          className={`nav-dropdown${visaOpen ? ' open' : ''}${visaActive ? ' active' : ''}`}
+          ref={visaRef}
         >
-          Ballot Visa Awareness
-        </Link>
+          <button
+            type="button"
+            className={`nav-dropdown-trigger${visaActive ? ' nav-active' : ''}`}
+            aria-expanded={visaOpen}
+            aria-haspopup="true"
+            onClick={() => {
+              setVisaOpen((open) => !open);
+              setStudyOpen(false);
+            }}
+          >
+            Visa Guides
+            <ChevronDown size={16} className={`nav-dropdown-chevron${visaOpen ? ' open' : ''}`} />
+          </button>
+          <div className="nav-dropdown-menu">
+            {VISA_GUIDES_LINKS.map((item) => (
+              <Link
+                key={item.to}
+                to={item.to}
+                className={active === item.activeKey ? 'nav-active' : ''}
+                onClick={closeMenu}
+              >
+                {item.label}
+              </Link>
+            ))}
+          </div>
+        </div>
+
         <button type="button" onClick={() => goHomeSection('#awareness')}>Scam Alerts</button>
         <button type="button" className="nav-cta" onClick={() => goHomeSection('#book')}>
           Book Session

@@ -10,8 +10,10 @@ import StudyAbroadDocuments from './components/StudyAbroadDocuments';
 import StudyAbroadWhyDocuments from './components/StudyAbroadWhyDocuments';
 import StudyAbroadGuides from './components/StudyAbroadGuides';
 import StudyAbroadReupload from './components/StudyAbroadReupload';
+import UniversitiesScholarships from './components/UniversitiesScholarships';
 import AustraliaPRReupload from './components/AustraliaPRReupload';
 import BallotVisaAwareness from './components/BallotVisaAwareness';
+import VisaFreeGuides from './components/VisaFreeGuides';
 
 // Custom wrapper to manage admin authentication & session checks
 const AdminRoute = () => {
@@ -91,11 +93,13 @@ function App() {
         <Route path="/australia-pr-eligibility" element={<AustraliaPREligibility />} />
         <Route path="/australia-pr-reupload/:token" element={<AustraliaPRReupload />} />
         <Route path="/ballot-visa-awareness" element={<BallotVisaAwareness />} />
+        <Route path="/visa-free-guides" element={<VisaFreeGuides />} />
 
         {/* Study Abroad tools */}
         <Route path="/study-abroad-documents" element={<StudyAbroadDocuments />} />
         <Route path="/study-abroad-why-documents" element={<StudyAbroadWhyDocuments />} />
         <Route path="/study-abroad-guides" element={<StudyAbroadGuides />} />
+        <Route path="/universities-scholarships" element={<UniversitiesScholarships />} />
         <Route path="/study-abroad-reupload/:token" element={<StudyAbroadReupload />} />
 
         {/* Fallback to home */}

@@ -39,6 +39,7 @@ const SiteFooter = () => {
           <a href="#education" onClick={(e) => goHomeSection(e, '#education')}>Visa Guide</a>
           <Link to="/study-abroad-documents">Study Abroad</Link>
           <Link to="/apply-australia-pr">Apply Australia PR</Link>
+          <Link to="/visa-free-guides">Visa Free Guides</Link>
           <Link to="/ballot-visa-awareness">Ballot Visa Awareness</Link>
           <a href="#awareness" onClick={(e) => goHomeSection(e, '#awareness')}>Scam Alerts</a>
           <a href="#book" onClick={(e) => goHomeSection(e, '#book')} style={{ color: '#fff', fontWeight: '700', cursor: 'pointer' }}>Book Session</a>
