@@ -4,10 +4,16 @@ import SiteNavbar from './SiteNavbar';
 import SiteFooter from './SiteFooter';
 import CustomSelect from './CustomSelect';
 import { API_URL } from '../config';
-import { UNIVERSITIES, UNI_COUNTRIES } from '../data/universitiesScholarships';
+import {
+  UNIVERSITIES,
+  SCHOLARSHIPS,
+  UNI_COUNTRIES,
+  SCH_COUNTRIES,
+} from '../data/universitiesScholarships';
 import './UniversitiesScholarships.css';
 
-const UNI_PAGE_SIZE = 15;
+const PAGE_SIZE = 15;
+const SCHOLARSHIP_SESSION_PRICE = 12000;
 
 const toOptions = (list) => list.map((item) => ({ value: item, label: item }));
 
@@ -148,6 +154,9 @@ const FilterPills = ({ countries, active, onSelect }) => (
 );
 
 const UniversitiesScholarships = () => {
+  const [schCountry, setSchCountry] = useState('All');
+  const [schQuery, setSchQuery] = useState('');
+  const [schPage, setSchPage] = useState(1);
   const [uniCountry, setUniCountry] = useState('All');
   const [uniQuery, setUniQuery] = useState('');
   const [uniPage, setUniPage] = useState(1);
@@ -157,15 +166,28 @@ const UniversitiesScholarships = () => {
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'instant' });
-    document.title = 'Universities Directory 2026–27 | RouteUp';
+    document.title = 'Universities & Scholarships Directory 2026–27 | RouteUp';
     return () => {
       document.title = 'RouteUp';
     };
   }, []);
 
   useEffect(() => {
+    setSchPage(1);
+  }, [schCountry, schQuery]);
+
+  useEffect(() => {
     setUniPage(1);
   }, [uniCountry, uniQuery]);
+
+  const filteredSchs = useMemo(() => {
+    const q = schQuery.trim().toLowerCase();
+    return SCHOLARSHIPS.filter(
+      (s) =>
+        (schCountry === 'All' || s.country === schCountry) &&
+        (!q || s.name.toLowerCase().includes(q))
+    );
+  }, [schCountry, schQuery]);
 
   const filteredUnis = useMemo(() => {
     const q = uniQuery.trim().toLowerCase();
@@ -176,15 +198,30 @@ const UniversitiesScholarships = () => {
     );
   }, [uniCountry, uniQuery]);
 
-  const uniTotalPages = Math.max(1, Math.ceil(filteredUnis.length / UNI_PAGE_SIZE));
+  const schTotalPages = Math.max(1, Math.ceil(filteredSchs.length / PAGE_SIZE));
+  const safeSchPage = Math.min(schPage, schTotalPages);
+  const pagedSchs = useMemo(() => {
+    const start = (safeSchPage - 1) * PAGE_SIZE;
+    return filteredSchs.slice(start, start + PAGE_SIZE);
+  }, [filteredSchs, safeSchPage]);
+
+  const schRangeStart = filteredSchs.length === 0 ? 0 : (safeSchPage - 1) * PAGE_SIZE + 1;
+  const schRangeEnd = Math.min(safeSchPage * PAGE_SIZE, filteredSchs.length);
+
+  const uniTotalPages = Math.max(1, Math.ceil(filteredUnis.length / PAGE_SIZE));
   const safeUniPage = Math.min(uniPage, uniTotalPages);
   const pagedUnis = useMemo(() => {
-    const start = (safeUniPage - 1) * UNI_PAGE_SIZE;
-    return filteredUnis.slice(start, start + UNI_PAGE_SIZE);
+    const start = (safeUniPage - 1) * PAGE_SIZE;
+    return filteredUnis.slice(start, start + PAGE_SIZE);
   }, [filteredUnis, safeUniPage]);
 
-  const uniRangeStart = filteredUnis.length === 0 ? 0 : (safeUniPage - 1) * UNI_PAGE_SIZE + 1;
-  const uniRangeEnd = Math.min(safeUniPage * UNI_PAGE_SIZE, filteredUnis.length);
+  const uniRangeStart = filteredUnis.length === 0 ? 0 : (safeUniPage - 1) * PAGE_SIZE + 1;
+  const uniRangeEnd = Math.min(safeUniPage * PAGE_SIZE, filteredUnis.length);
+
+  const goToSchPage = (page) => {
+    setSchPage(Math.min(Math.max(1, page), schTotalPages));
+    document.getElementById('scholarships-table')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
 
   const goToUniPage = (page) => {
     setUniPage(Math.min(Math.max(1, page), uniTotalPages));
@@ -193,6 +230,58 @@ const UniversitiesScholarships = () => {
 
   const updateField = (field, value) => {
     setForm((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const loadRazorpayScript = () =>
+    new Promise((resolve) => {
+      if (window.Razorpay) {
+        resolve(true);
+        return;
+      }
+      const script = document.createElement('script');
+      script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+      script.onload = () => resolve(true);
+      script.onerror = () => resolve(false);
+      document.body.appendChild(script);
+    });
+
+  const buildPayload = (razorpayResponse) => {
+    const countries = form.preferredCountries
+      .split(',')
+      .map((c) => c.trim())
+      .filter(Boolean);
+
+    return {
+      name: form.name.trim(),
+      phone: form.phone.trim(),
+      email: form.email.trim(),
+      age: form.age.trim(),
+      address: form.address.trim(),
+      education: form.education,
+      currentStatus: form.currentStatus,
+      skills: form.skills.trim(),
+      preferredCountries: countries,
+      budget: form.budget,
+      timeline: form.timeline,
+      notes: form.notes.trim(),
+      amount: SCHOLARSHIP_SESSION_PRICE,
+      razorpay_payment_id: razorpayResponse.razorpay_payment_id,
+      razorpay_order_id: razorpayResponse.razorpay_order_id,
+      razorpay_signature: razorpayResponse.razorpay_signature,
+    };
+  };
+
+  const saveLeadAfterPayment = async (razorpayResponse) => {
+    const res = await fetch(`${API_URL}/api/university-leads`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(buildPayload(razorpayResponse)),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data.message || 'Payment verified but failed to save enquiry');
+    }
+    return data;
   };
 
   const handleSubmit = async (e) => {
@@ -218,44 +307,64 @@ const UniversitiesScholarships = () => {
       return;
     }
 
-    const countries = form.preferredCountries
-      .split(',')
-      .map((c) => c.trim())
-      .filter(Boolean);
-
     setSubmitting(true);
     try {
-      const payload = {
-        name: form.name.trim(),
-        phone: form.phone.trim(),
-        email: form.email.trim(),
-        age: form.age.trim(),
-        address: form.address.trim(),
-        education: form.education,
-        currentStatus: form.currentStatus,
-        skills: form.skills.trim(),
-        preferredCountries: countries,
-        budget: form.budget,
-        timeline: form.timeline,
-        notes: form.notes.trim(),
-      };
-
-      const res = await fetch(`${API_URL}/api/university-leads`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
-      });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        throw new Error(data.message || 'Failed to save your details');
+      const scriptLoaded = await loadRazorpayScript();
+      if (!scriptLoaded) {
+        throw new Error('Failed to load Razorpay. Please check your internet connection.');
       }
 
-      toast.success('Submitted successfully! You can fill a new form now.');
-      setForm(emptyForm());
-      setFormKey((k) => k + 1);
-      document.getElementById('book-session-form')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      const orderResponse = await fetch(`${API_URL}/api/payment/create-order`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ amount: SCHOLARSHIP_SESSION_PRICE }),
+      });
+
+      if (!orderResponse.ok) {
+        throw new Error('Failed to initialize payment gateway.');
+      }
+
+      const orderData = await orderResponse.json();
+
+      const options = {
+        key: import.meta.env.VITE_RAZORPAY_KEY_ID || 'rzp_test_placeholder_key_id',
+        amount: orderData.amount,
+        currency: orderData.currency,
+        name: 'RouteUp',
+        description: 'Universities & Scholarships Session',
+        image: '/Routeup Logo.png',
+        order_id: orderData.id,
+        handler: async (response) => {
+          try {
+            setSubmitting(true);
+            await saveLeadAfterPayment(response);
+            toast.success('Payment successful! Our team will contact you soon.');
+            setForm(emptyForm());
+            setFormKey((k) => k + 1);
+            document.getElementById('book-session-form')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+          } catch (error) {
+            toast.error(error.message || 'Could not finalize booking.');
+          } finally {
+            setSubmitting(false);
+          }
+        },
+        prefill: {
+          name: form.name.trim(),
+          email: form.email.trim(),
+          contact: form.phone.trim(),
+        },
+        theme: {
+          color: '#0d7c3d',
+        },
+      };
+
+      const rzp = new window.Razorpay(options);
+      rzp.on('payment.failed', (response) => {
+        toast.error(response?.error?.description || 'Payment failed. Please try again.');
+      });
+      rzp.open();
     } catch (err) {
-      toast.error(err.message || 'Something went wrong. Please try again.');
+      toast.error(err.message || 'Could not start payment. Please try again.');
     } finally {
       setSubmitting(false);
     }
@@ -268,18 +377,23 @@ const UniversitiesScholarships = () => {
       <section className="usd-hero">
         <div className="usd-hero-badge">Study Abroad — 2026–27 Directory</div>
         <h1>
-          Universities &amp; <span className="green">flagship awards</span>,
+          Universities &amp; <span className="green">scholarships</span>,
           <br />
           all in one clean list.
         </h1>
         <p>
-          147 globally recognised universities across 11 countries. Search, filter by country, and
-          see notable scholarships linked to each campus — no agent needed to browse this list.
+          147 globally recognised universities and 39 scholarships across 11 countries. Search,
+          filter by country, and go straight to the official page — no agent needed to see any of
+          this.
         </p>
         <div className="usd-hero-stats">
           <div className="usd-stat">
             <h3>147</h3>
             <p>Universities listed</p>
+          </div>
+          <div className="usd-stat">
+            <h3>39</h3>
+            <p>Scholarships listed</p>
           </div>
           <div className="usd-stat">
             <h3>11</h3>
@@ -303,14 +417,119 @@ const UniversitiesScholarships = () => {
             ))}
           </div>
           <div className="usd-guide-note">
-            University lists reflect globally recognised (tier-one) institutions. Scholarship names
-            shown next to each university are indicative and can change — always confirm on the
-            official website before applying.
+            University lists reflect globally recognised (tier-one) institutions. Scholarship
+            deadlines and amounts shown are for the 2026–27 cycle and can change — always confirm on
+            the official website before applying.
           </div>
         </div>
       </section>
 
-      <section className="usd-section usd-alt" id="universities-table">
+      <section className="usd-section usd-alt" id="scholarships-table">
+        <div className="usd-section-title">
+          <h2>Scholarships</h2>
+          <p>Filter by country, check the deadline, and see what each award covers</p>
+        </div>
+        <div className="usd-list-toolbar">
+          <div className="usd-filter-bar">
+            <FilterPills
+              countries={SCH_COUNTRIES}
+              active={schCountry}
+              onSelect={(country) => {
+                setSchCountry(country);
+                setSchPage(1);
+              }}
+            />
+            <input
+              type="search"
+              className="usd-search-input"
+              value={schQuery}
+              onChange={(e) => setSchQuery(e.target.value)}
+              placeholder="Search scholarship name..."
+              aria-label="Search scholarships"
+            />
+          </div>
+          <p className="usd-result-count">
+            {filteredSchs.length === 0
+              ? `0 of ${SCHOLARSHIPS.length} scholarships`
+              : `Showing ${schRangeStart}–${schRangeEnd} of ${filteredSchs.length} scholarships`}
+          </p>
+        </div>
+
+        <div className="usd-table-wrap usd-sch-table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Country</th>
+                <th>Scholarship</th>
+                <th>Provider</th>
+                <th>Level</th>
+                <th>Covers</th>
+                <th>Who it&apos;s for</th>
+                <th>Deadline (2026–27)</th>
+              </tr>
+            </thead>
+            <tbody>
+              {pagedSchs.length === 0 ? (
+                <tr>
+                  <td colSpan={7} className="usd-empty-cell">
+                    No scholarships match your filters.
+                  </td>
+                </tr>
+              ) : (
+                pagedSchs.map((s) => (
+                  <tr key={`${s.country}-${s.name}`}>
+                    <td>
+                      <span className="usd-country-badge">{s.country}</span>
+                    </td>
+                    <td className="usd-cell-name">{s.name}</td>
+                    <td>{s.provider}</td>
+                    <td className="usd-cell-muted">{s.level}</td>
+                    <td>{s.covers}</td>
+                    <td>{s.who}</td>
+                    <td className="usd-cell-muted">{s.deadline}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {filteredSchs.length > PAGE_SIZE && (
+          <div className="usd-pagination">
+            <button
+              type="button"
+              className="usd-page-btn"
+              onClick={() => goToSchPage(safeSchPage - 1)}
+              disabled={safeSchPage <= 1}
+            >
+              Previous
+            </button>
+            <div className="usd-page-numbers" role="navigation" aria-label="Scholarships pagination">
+              {Array.from({ length: schTotalPages }, (_, i) => i + 1).map((page) => (
+                <button
+                  key={page}
+                  type="button"
+                  className={`usd-page-num${safeSchPage === page ? ' active' : ''}`}
+                  onClick={() => goToSchPage(page)}
+                  aria-current={safeSchPage === page ? 'page' : undefined}
+                >
+                  {page}
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              className="usd-page-btn"
+              onClick={() => goToSchPage(safeSchPage + 1)}
+              disabled={safeSchPage >= schTotalPages}
+            >
+              Next
+            </button>
+          </div>
+        )}
+      </section>
+
+      <section className="usd-section" id="universities-table">
         <div className="usd-section-title">
           <h2>Universities</h2>
           <p>Filter by country or search by name</p>
@@ -378,7 +597,7 @@ const UniversitiesScholarships = () => {
           </table>
         </div>
 
-        {filteredUnis.length > UNI_PAGE_SIZE && (
+        {filteredUnis.length > PAGE_SIZE && (
           <div className="usd-pagination">
             <button
               type="button"
@@ -609,11 +828,16 @@ const UniversitiesScholarships = () => {
             </div>
           </div>
 
+          <div className="usd-payment-summary">
+            <span>Universities &amp; Scholarships session</span>
+            <strong>Rs.{SCHOLARSHIP_SESSION_PRICE}</strong>
+          </div>
+
           <button type="submit" className="usd-submit-btn" disabled={submitting}>
-            {submitting ? 'Submitting...' : 'Submit details'}
+            {submitting ? 'Opening payment...' : `Pay Rs.${SCHOLARSHIP_SESSION_PRICE} & Book Session`}
           </button>
           <p className="usd-form-note">
-            Free enquiry — no payment required. Our team typically responds within 24 hours.
+            Secure payment via Razorpay. After payment, our team will connect with you within 24 hours.
           </p>
         </form>
       </section>

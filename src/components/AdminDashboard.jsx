@@ -3791,6 +3791,7 @@ const AdminDashboard = ({ onLogout }) => {
                         <th style={{ width: '11%' }}>Countries</th>
                         <th style={{ width: '11%' }}>Budget</th>
                         <th style={{ width: '11%' }}>Timeline</th>
+                        <th style={{ width: '10%' }}>Payment</th>
                         <th style={{ width: '10%' }}>Status</th>
                         <th>Actions</th>
                       </tr>
@@ -3833,6 +3834,14 @@ const AdminDashboard = ({ onLogout }) => {
                             </td>
                             <td title={lead.timeline} style={{ fontSize: 13 }}>
                               <span className="admin-table-cell-ellipsis">{lead.timeline || '—'}</span>
+                            </td>
+                            <td>
+                              <span className={`badge pay-${(lead.paymentStatus || 'Pending').toLowerCase()}`}>
+                                {lead.paymentStatus || 'Pending'}
+                              </span>
+                              {lead.amount > 0 ? (
+                                <span style={{ fontSize: 11, color: '#64748b', marginLeft: 6 }}>Rs.{lead.amount}</span>
+                              ) : null}
                             </td>
                             <td>
                               <span
@@ -5908,6 +5917,19 @@ const AdminDashboard = ({ onLogout }) => {
                   </div>
                   <div className="detail-item"><span className="detail-label">Budget</span><span className="detail-val">{selectedUniversityLead.budget || '—'}</span></div>
                   <div className="detail-item"><span className="detail-label">Timeline</span><span className="detail-val">{selectedUniversityLead.timeline || '—'}</span></div>
+                  <div className="detail-item">
+                    <span className="detail-label">Payment</span>
+                    <span className="detail-val">
+                      {selectedUniversityLead.paymentStatus || 'Pending'}
+                      {selectedUniversityLead.amount > 0 ? ` — Rs.${selectedUniversityLead.amount}` : ''}
+                    </span>
+                  </div>
+                  {selectedUniversityLead.paymentId && (
+                    <div className="detail-item">
+                      <span className="detail-label">Payment ID</span>
+                      <span className="detail-val" style={{ fontSize: 12 }}>{selectedUniversityLead.paymentId}</span>
+                    </div>
+                  )}
                 </div>
               </div>
 
