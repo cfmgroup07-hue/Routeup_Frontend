@@ -2339,21 +2339,52 @@ h1, h2, h3, h4, h5, h6 {
 }
 
 .admin-table-container.is-scrollable {
-  overflow-x: auto;
+  overflow-x: hidden;
 }
 
 .admin-table.rows-single-line {
   table-layout: fixed;
-  min-width: 1180px;
+  width: 100%;
+  min-width: 0;
 }
 
 .admin-table.rows-single-line th,
 .admin-table.rows-single-line td {
   white-space: nowrap;
   vertical-align: middle;
-  padding: 10px 14px;
+  padding: 10px 12px;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.admin-table.rows-single-line th:last-child,
+.admin-table.rows-single-line td:last-child {
+  width: 168px;
+  min-width: 168px;
+  max-width: 168px;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: nowrap;
+  padding-right: 14px;
+}
+
+/* Keep status/payment badges fully visible (e.g. CONTACTED) */
+.admin-table.rows-single-line th:nth-last-child(2),
+.admin-table.rows-single-line td:nth-last-child(2) {
+  min-width: 112px;
+  overflow: visible;
+  text-overflow: clip;
+}
+
+.admin-table.rows-single-line td .badge {
+  display: inline-flex;
+  max-width: none;
+  white-space: nowrap;
+  padding: 4px 9px;
+  font-size: 10px;
+  letter-spacing: 0.03em;
+  line-height: 1.2;
+  flex-shrink: 0;
 }
 
 .admin-table.rows-single-line .admin-table-actions {
@@ -2361,6 +2392,17 @@ h1, h2, h3, h4, h5, h6 {
   gap: 6px;
   flex-wrap: nowrap;
   overflow: visible;
+  min-width: 148px;
+  justify-content: flex-start;
+}
+
+.admin-table.rows-single-line .admin-table-actions .admin-action-btn {
+  flex-shrink: 0;
+}
+
+.scholarship-leads-table th,
+.scholarship-leads-table td {
+  padding: 10px 10px;
 }
 
 .admin-table-cell-ellipsis {
@@ -3038,9 +3080,66 @@ h1, h2, h3, h4, h5, h6 {
   display: flex;
   flex-direction: column;
   gap: 8px;
-  max-height: 280px;
+  max-height: 420px;
   overflow-y: auto;
   padding: 2px;
+}
+
+.student-reupload-country-pill {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px 16px;
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: #f0fdf4;
+  border: 1px solid #bbf7d0;
+  color: #166534;
+  font-size: 13px;
+}
+
+.student-reupload-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.student-reupload-section-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #f8fafc;
+  padding: 6px 2px;
+}
+
+.student-reupload-section-title {
+  margin: 0;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.3px;
+  text-transform: uppercase;
+  color: #0d7c3d;
+}
+
+.student-reupload-section-select {
+  border: 1px solid #cbd5e1;
+  background: #fff;
+  color: #334155;
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.student-reupload-section-select:hover {
+  border-color: #94a3b8;
+  background: #f8fafc;
 }
 
 .student-reupload-doc-item {

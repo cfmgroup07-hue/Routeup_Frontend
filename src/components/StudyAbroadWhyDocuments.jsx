@@ -138,14 +138,15 @@ const StudyAbroadWhyDocuments = () => {
               Ready to start your application?
             </h3>
             <p style={{ color: '#555', lineHeight: 1.7, marginBottom: 16 }}>
-              Upload your documents against the full checklist, or talk it through with our team first.
+              Share your course and destination country, or talk it through with our team first.
+              We&apos;ll request any documents needed by email.
             </p>
             <Link
               to="/study-abroad-documents"
               className="pr-submit-btn"
               style={{ display: 'inline-block', textDecoration: 'none', maxWidth: 360 }}
             >
-              Go to the document checklist →
+              Go to study abroad application →
             </Link>
           </div>
         </div>

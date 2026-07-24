@@ -280,8 +280,8 @@ const AustraliaPREligibility = () => {
                 Secure payment via Razorpay. After payment, our team will connect with you within 24 hours.
               </p>
               <p className="pr-back-link">
-                Already have your documents?{' '}
-                <Link to="/apply-australia-pr">Go to document upload →</Link>
+                Ready to apply?{' '}
+                <Link to="/apply-australia-pr">Go to PR application →</Link>
               </p>
             </div>
           )}

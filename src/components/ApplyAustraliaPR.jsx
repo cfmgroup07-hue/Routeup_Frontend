@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { Check, Plane, Upload } from 'lucide-react';
+import { Plane } from 'lucide-react';
 import SiteNavbar from './SiteNavbar';
 import SiteFooter from './SiteFooter';
 import { API_URL } from '../config';
@@ -9,7 +9,6 @@ import {
   AU_STATES,
   PR_COUNTRIES,
   PR_OCCUPATIONS,
-  UNIVERSAL_DOCS,
   findOccupation,
 } from '../data/australiaPrData';
 
@@ -63,10 +62,6 @@ const ApplyAustraliaPR = () => {
   const [state, setState] = useState('');
   const [occValue, setOccValue] = useState('');
   const [form, setForm] = useState(emptyForm());
-  const [docTitle, setDocTitle] = useState('');
-  const [fileName, setFileName] = useState('');
-  const [selectedFile, setSelectedFile] = useState(null);
-  const [uploaded, setUploaded] = useState({});
   const [submitting, setSubmitting] = useState(false);
   const [formKey, setFormKey] = useState(0);
 
@@ -76,24 +71,11 @@ const ApplyAustraliaPR = () => {
     setState('');
     setOccValue('');
     setForm(emptyForm());
-    setDocTitle('');
-    setFileName('');
-    setSelectedFile(null);
-    setUploaded({});
     setFormKey((key) => key + 1);
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const occupation = useMemo(() => findOccupation(occValue), [occValue]);
-
-  const allDocs = useMemo(() => {
-    if (!occupation) return [];
-    return [...UNIVERSAL_DOCS, ...occupation.docs];
-  }, [occupation]);
-
-  const uploadedCount = allDocs.filter((doc) => uploaded[doc]?.file).length;
-  const totalCount = allDocs.length;
-  const progressPct = totalCount ? Math.round((uploadedCount / totalCount) * 100) : 0;
 
   const updateForm = (field, value) => {
     setForm((prev) => ({ ...prev, [field]: value }));
@@ -101,14 +83,9 @@ const ApplyAustraliaPR = () => {
 
   const handleOccChange = (value) => {
     setOccValue(value);
-    setUploaded({});
-    setDocTitle('');
-    setFileName('');
-    setSelectedFile(null);
 
     const occ = findOccupation(value);
     if (occ) {
-      setDocTitle(UNIVERSAL_DOCS[0] || '');
       setForm((prev) => ({
         ...prev,
         assessingAuthority: prev.assessingAuthority || occ.body,
@@ -116,34 +93,6 @@ const ApplyAustraliaPR = () => {
     } else {
       setForm(emptyForm());
     }
-  };
-
-  const MAX_FILE_BYTES = 10 * 1024 * 1024;
-  const MAX_TOTAL_BYTES = 100 * 1024 * 1024;
-
-  const missingDocs = useMemo(
-    () => allDocs.filter((doc) => !uploaded[doc]?.file),
-    [allDocs, uploaded]
-  );
-  const allDocsUploaded = occupation && allDocs.length > 0 && missingDocs.length === 0;
-
-  const handleAddDocument = () => {
-    if (!occupation || !docTitle) return;
-    if (!selectedFile) {
-      toast.error('Please choose a file to add this document.');
-      return;
-    }
-    if (selectedFile.size > MAX_FILE_BYTES) {
-      toast.error('Each file must be under 10MB. Please compress or use a smaller file.');
-      return;
-    }
-    setUploaded((prev) => ({
-      ...prev,
-      [docTitle]: { fileName: selectedFile.name, file: selectedFile },
-    }));
-    setSelectedFile(null);
-    setFileName('');
-    toast.success(`${docTitle} added`);
   };
 
   const hasPartnerStatus = ['Married', 'De facto'].includes(form.maritalStatus);
@@ -196,15 +145,6 @@ const ApplyAustraliaPR = () => {
     }
     if (!validateForm()) return;
 
-    const files = allDocs
-      .filter((title) => uploaded[title]?.file)
-      .map((title) => uploaded[title].file);
-    const totalSize = files.reduce((sum, file) => sum + (file.size || 0), 0);
-    if (totalSize > MAX_TOTAL_BYTES) {
-      toast.error('Total upload size must be under 100MB. Please compress larger files.');
-      return;
-    }
-
     setSubmitting(true);
     try {
       const formData = new FormData();
@@ -227,18 +167,7 @@ const ApplyAustraliaPR = () => {
         email: form.email.trim(),
         mobile: form.mobile.trim(),
       }));
-
-      const meta = allDocs.map((title) => {
-        const info = uploaded[title];
-        return {
-          title,
-          fileName: info?.fileName || '',
-          attached: Boolean(info?.file),
-        };
-      });
-      formData.append('documentMeta', JSON.stringify(meta));
-
-      files.forEach((file) => formData.append('documents', file));
+      formData.append('documentMeta', JSON.stringify([]));
 
       const res = await fetch(`${API_URL}/api/pr-leads`, {
         method: 'POST',
@@ -246,9 +175,6 @@ const ApplyAustraliaPR = () => {
       });
 
       if (!res.ok) {
-        if (res.status === 413) {
-          throw new Error('Files are too large for the server. Please upload smaller files (under 10MB each).');
-        }
         const err = await res.json().catch(() => ({}));
         throw new Error(err.message || 'Failed to submit');
       }
@@ -293,8 +219,8 @@ const ApplyAustraliaPR = () => {
           Your <span className="green">Australia PR</span> application — tell us about yourself first.
         </h1>
         <p>
-          Select your nominated occupation, complete your profile, then upload any documents you already have.
-          Our team will review everything before your session.
+          Select your nominated occupation and complete your profile. Our team will review your application
+          and request any documents needed for your country by email.
         </p>
 
         <div className="pr-missing-banner">
@@ -802,105 +728,6 @@ const ApplyAustraliaPR = () => {
                 </div>
               </div>
 
-              {/* ── Document Upload (below form) ── */}
-              <div className="pr-card">
-                <h3 className="pr-card-title">Document upload</h3>
-                <p className="pr-upload-required-note">
-                  Documents are optional — upload what you have now. Yellow = not uploaded yet, green = uploaded.
-                  You can submit even if some files are still missing.
-                </p>
-                <div className="pr-upload-row">
-                  <select
-                    className="pr-select"
-                    value={docTitle}
-                    onChange={(e) => setDocTitle(e.target.value)}
-                  >
-                    <optgroup label="Standard documents (optional)">
-                      {UNIVERSAL_DOCS.map((d) => (
-                        <option key={d} value={d}>
-                          {uploaded[d]?.file ? `✓ ${d}` : d}
-                        </option>
-                      ))}
-                    </optgroup>
-                    <optgroup label={`${occupation.body} checklist (optional)`}>
-                      {occupation.docs.map((d) => (
-                        <option key={d} value={d}>
-                          {uploaded[d]?.file ? `✓ ${d}` : d}
-                        </option>
-                      ))}
-                    </optgroup>
-                  </select>
-                  <label className="pr-file-btn">
-                    <input
-                      type="file"
-                      accept=".pdf"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0] || null;
-                        setSelectedFile(file);
-                        setFileName(file?.name || '');
-                      }}
-                    />
-                    {fileName || 'Choose file'}
-                  </label>
-                  <button type="button" className="pr-add-btn" onClick={handleAddDocument}>
-                    <Upload size={16} />
-                    Add document
-                  </button>
-                </div>
-              </div>
-
-              <div className="pr-progress-row">
-                <div className="pr-progress-track">
-                  <div className="pr-progress-bar" style={{ width: `${progressPct}%` }} />
-                </div>
-                <span className="pr-progress-text">
-                  {uploadedCount} of {totalCount} uploaded
-                  {!allDocsUploaded && (
-                    <span className="pr-progress-missing"> — {missingDocs.length} still missing</span>
-                  )}
-                </span>
-              </div>
-
-              <div className="pr-card">
-                <p className="pr-label">Standard documents (all applicants) — optional</p>
-                {UNIVERSAL_DOCS.map((doc) => (
-                  <div className="pr-check-row" key={doc}>
-                    <span className="pr-check-doc-label">
-                      <span className={`pr-check-dot ${uploaded[doc]?.file ? 'done' : 'pending'}`} />
-                      <span>{doc}</span>
-                    </span>
-                    {uploaded[doc]?.file ? (
-                      <span className="pr-check-ok">
-                        <Check size={14} /> {uploaded[doc].fileName}
-                      </span>
-                    ) : (
-                      <span className="pr-check-pending">Optional — not uploaded</span>
-                    )}
-                  </div>
-                ))}
-              </div>
-
-              <div className="pr-card">
-                <p className="pr-label">
-                  {occupation.body} checklist — {occupation.name} — optional
-                </p>
-                {occupation.docs.map((doc) => (
-                  <div className="pr-check-row" key={doc}>
-                    <span className="pr-check-doc-label">
-                      <span className={`pr-check-dot ${uploaded[doc]?.file ? 'done' : 'pending'}`} />
-                      <span>{doc}</span>
-                    </span>
-                    {uploaded[doc]?.file ? (
-                      <span className="pr-check-ok">
-                        <Check size={14} /> {uploaded[doc].fileName}
-                      </span>
-                    ) : (
-                      <span className="pr-check-pending">Optional — not uploaded</span>
-                    )}
-                  </div>
-                ))}
-              </div>
-
               <div className="pr-card">
                 <button
                   type="button"
@@ -911,7 +738,8 @@ const ApplyAustraliaPR = () => {
                   {submitting ? 'Submitting...' : 'Submit application'}
                 </button>
                 <p className="pr-secure-note">
-                  After you submit, our team will connect with you within 24 hours.
+                  After you submit, our team will connect with you within 24 hours and request any
+                  documents needed for your country by email.
                 </p>
               </div>
             </>

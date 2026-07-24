@@ -3,7 +3,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { ChevronDown, Menu, X } from 'lucide-react';
 
 const STUDY_ABROAD_LINKS = [
-  { to: '/study-abroad-documents', label: 'Upload Documents', activeKey: 'study-abroad' },
+  { to: '/study-abroad-documents', label: 'Apply Study Abroad', activeKey: 'study-abroad' },
   { to: '/study-abroad-guides', label: 'Free Guides', activeKey: 'study-abroad-guides' },
   { to: '/study-abroad-why-documents', label: 'Why Documents Matter', activeKey: 'study-abroad-why' },
   {

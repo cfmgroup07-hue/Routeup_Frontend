@@ -14,7 +14,7 @@ import {
 
 import { CountryList, getCountryFlagCode, getFlagImageUrl } from '../utils/countries';
 import CustomSelect from './CustomSelect';
-import { getAllStudyAbroadDocs } from '../data/studyAbroadData';
+import { getAllStudyAbroadDocs, getStudyAbroadSections } from '../data/studyAbroadData';
 import { UNIVERSAL_DOCS, PR_OCCUPATIONS } from '../data/australiaPrData';
 
 const getImageUrl = (path) => {
@@ -519,6 +519,18 @@ const AdminDashboard = ({ onLogout }) => {
   const [studentWrongDocs, setStudentWrongDocs] = useState([]);
   const [studentReuploadNote, setStudentReuploadNote] = useState('');
   const [studentMailSending, setStudentMailSending] = useState(false);
+
+  // Scholarship leads
+  const [universityLeads, setUniversityLeads] = useState([]);
+  const [universitySearchTerm, setUniversitySearchTerm] = useState('');
+  const [selectedUniversityLead, setSelectedUniversityLead] = useState(null);
+  const [universityModalMode, setUniversityModalMode] = useState(null); // 'view' | 'edit' | 'mail'
+  const [universityLeadsLoading, setUniversityLeadsLoading] = useState(false);
+  const [universityEditData, setUniversityEditData] = useState(null);
+  const [universityMailSubject, setUniversityMailSubject] = useState('');
+  const [universityMailMessage, setUniversityMailMessage] = useState('');
+  const [universityMailFiles, setUniversityMailFiles] = useState([]);
+  const [universityMailSending, setUniversityMailSending] = useState(false);
 
   // Activity Logs States
   const [activityLogs, setActivityLogs] = useState([]);
@@ -1145,6 +1157,27 @@ const AdminDashboard = ({ onLogout }) => {
     }
   };
 
+  const fetchUniversityLeads = async () => {
+    const token = localStorage.getItem('adminToken');
+    if (!token) return;
+    setUniversityLeadsLoading(true);
+    try {
+      const response = await fetch(`${API_URL}/api/university-leads`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setUniversityLeads(data);
+      } else if (response.status === 401) {
+        handleUnauthorized();
+      }
+    } catch (error) {
+      console.error('Failed to fetch university leads:', error);
+    } finally {
+      setUniversityLeadsLoading(false);
+    }
+  };
+
   const fetchActivityLogs = async () => {
     const token = localStorage.getItem('adminToken');
     const role = localStorage.getItem('adminRole');
@@ -1407,20 +1440,54 @@ const AdminDashboard = ({ onLogout }) => {
     );
   };
 
-  /** Full checklist for country + any extra titles already on the lead (uploaded or missing). */
-  const getStudentReuploadDocOptions = (lead) => {
+  /** Country-based checklist (same as old public page), grouped by section. */
+  const getStudentReuploadDocSections = (lead) => {
     if (!lead) return [];
-    const checklist = getAllStudyAbroadDocs(lead.country || '') || [];
+    const country = String(lead.country || '').trim();
+    const sections = getStudyAbroadSections(country).map((section) => ({
+      title: section.title,
+      docs: section.docs.map((title) => ({
+        title,
+        fileName: '',
+        filePath: '',
+        needsReupload: false,
+      })),
+    }));
+
     const byTitle = new Map();
-    checklist.forEach((title) => {
-      byTitle.set(title, { title, fileName: '', filePath: '', needsReupload: false });
+    sections.forEach((section) => {
+      section.docs.forEach((doc) => byTitle.set(doc.title, doc));
     });
+
+    const extras = [];
     (lead.uploadedDocuments || []).forEach((doc) => {
       if (!doc?.title) return;
-      const prev = byTitle.get(doc.title) || { title: doc.title };
-      byTitle.set(doc.title, { ...prev, ...doc });
+      if (byTitle.has(doc.title)) {
+        Object.assign(byTitle.get(doc.title), doc);
+      } else {
+        const extra = { title: doc.title, fileName: '', filePath: '', needsReupload: false, ...doc };
+        byTitle.set(doc.title, extra);
+        extras.push(extra);
+      }
     });
-    return Array.from(byTitle.values());
+
+    if (extras.length > 0) {
+      sections.push({ title: 'Other documents on this lead', docs: extras });
+    }
+    return sections;
+  };
+
+  const getStudentReuploadDocOptions = (lead) =>
+    getStudentReuploadDocSections(lead).flatMap((section) => section.docs);
+
+  const toggleStudentSectionDocs = (titles) => {
+    setStudentWrongDocs((prev) => {
+      const allSelected = titles.every((t) => prev.includes(t));
+      if (allSelected) {
+        return prev.filter((t) => !titles.includes(t));
+      }
+      return [...new Set([...prev, ...titles])];
+    });
   };
 
   const handleSendStudentMail = async (e) => {
@@ -1469,6 +1536,142 @@ const AdminDashboard = ({ onLogout }) => {
       toast.error('Error sending follow-up email');
     } finally {
       setStudentMailSending(false);
+    }
+  };
+
+  const handleDeleteUniversityLead = async (id) => {
+    if (!window.confirm('Delete this scholarship lead?')) return;
+    const token = localStorage.getItem('adminToken');
+    try {
+      const response = await fetch(`${API_URL}/api/university-leads/${id}`, {
+        method: 'DELETE',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (response.ok) {
+        setUniversityLeads((prev) => prev.filter((l) => l._id !== id));
+        if (selectedUniversityLead?._id === id) closeUniversityLeadModal();
+        toast.success('University lead deleted');
+      } else if (response.status === 401) {
+        handleUnauthorized();
+      } else {
+        toast.error('Failed to delete lead');
+      }
+    } catch {
+      toast.error('Error deleting lead');
+    }
+  };
+
+  const openUniversityLeadModal = (lead, mode = 'view') => {
+    setSelectedUniversityLead(lead);
+    setUniversityModalMode(mode);
+    setUniversityEditData({
+      name: lead.name || '',
+      phone: lead.phone || '',
+      email: lead.email || '',
+      age: lead.age || '',
+      address: lead.address || '',
+      currentStatus: lead.currentStatus || '',
+      skills: lead.skills || '',
+      preferredCountries: Array.isArray(lead.preferredCountries)
+        ? lead.preferredCountries.join(', ')
+        : lead.preferredCountries || '',
+      education: lead.education || '',
+      budget: lead.budget || '',
+      timeline: lead.timeline || '',
+      notes: lead.notes || '',
+      status: lead.status || 'New',
+      adminNotes: lead.adminNotes || '',
+    });
+    setUniversityMailSubject(`RouteUp: Your Scholarship Follow-Up — ${lead.name || 'Update'}`);
+    setUniversityMailMessage(lead.adminNotes || '');
+    setUniversityMailFiles([]);
+  };
+
+  const closeUniversityLeadModal = () => {
+    setSelectedUniversityLead(null);
+    setUniversityModalMode(null);
+    setUniversityEditData(null);
+    setUniversityMailSubject('');
+    setUniversityMailMessage('');
+    setUniversityMailFiles([]);
+    setUniversityMailSending(false);
+  };
+
+  const handleUpdateUniversityLead = async (e) => {
+    e.preventDefault();
+    if (!selectedUniversityLead || !universityEditData) return;
+    const token = localStorage.getItem('adminToken');
+    try {
+      const response = await fetch(`${API_URL}/api/university-leads/${selectedUniversityLead._id}`, {
+        method: 'PUT',
+        headers: {
+          Authorization: `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(universityEditData),
+      });
+      if (response.ok) {
+        const updated = await response.json();
+        setUniversityLeads((prev) => prev.map((l) => (l._id === updated._id ? updated : l)));
+        setSelectedUniversityLead(updated);
+        toast.success('University lead updated');
+        setUniversityModalMode('view');
+      } else if (response.status === 401) {
+        handleUnauthorized();
+      } else {
+        toast.error('Failed to update lead');
+      }
+    } catch {
+      toast.error('Error updating lead');
+    }
+  };
+
+  const handleSendUniversityMail = async (e) => {
+    e.preventDefault();
+    if (!selectedUniversityLead) return;
+    if (!universityMailSubject.trim()) {
+      toast.error('Please enter an email subject.');
+      return;
+    }
+    if (!universityMailMessage.trim() && universityMailFiles.length === 0) {
+      toast.error('Please add a message or upload at least one attachment.');
+      return;
+    }
+
+    const token = localStorage.getItem('adminToken');
+    setUniversityMailSending(true);
+    try {
+      const formData = new FormData();
+      formData.append('subject', universityMailSubject.trim());
+      formData.append('notes', universityMailMessage);
+      universityMailFiles.forEach((file) => formData.append('documents', file));
+
+      const response = await fetch(
+        `${API_URL}/api/university-leads/${selectedUniversityLead._id}/send-email`,
+        {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${token}` },
+          body: formData,
+        }
+      );
+
+      const data = await response.json().catch(() => ({}));
+      if (response.ok) {
+        if (data.lead) {
+          setUniversityLeads((prev) => prev.map((l) => (l._id === data.lead._id ? data.lead : l)));
+          setSelectedUniversityLead(data.lead);
+        }
+        toast.success('Email sent successfully!');
+        closeUniversityLeadModal();
+      } else if (response.status === 401) {
+        handleUnauthorized();
+      } else {
+        toast.error(data.message || 'Failed to send email');
+      }
+    } catch {
+      toast.error('Error sending follow-up email');
+    } finally {
+      setUniversityMailSending(false);
     }
   };
 
@@ -1535,29 +1738,82 @@ const AdminDashboard = ({ onLogout }) => {
     );
   };
 
-  const getPrReuploadDocOptions = (lead) => {
+  /** Occupation checklist (same as old public Apply Australia PR page), grouped. */
+  const getPrReuploadDocSections = (lead) => {
     if (!lead) return [];
     let occDocs = [];
+    let occBody = lead.assessingBody || '';
+    let occName = lead.occupation || '';
     if (lead.occupation) {
       for (const group of PR_OCCUPATIONS) {
         const found = group.list.find((o) => o.name === lead.occupation);
         if (found) {
           occDocs = found.docs || [];
+          occBody = found.body || occBody;
+          occName = found.name || occName;
           break;
         }
       }
     }
-    const checklist = [...UNIVERSAL_DOCS, ...occDocs];
+
+    const sections = [
+      {
+        title: 'Standard documents (all applicants)',
+        docs: UNIVERSAL_DOCS.map((title) => ({
+          title,
+          fileName: '',
+          filePath: '',
+          needsReupload: false,
+        })),
+      },
+    ];
+
+    if (occDocs.length > 0) {
+      sections.push({
+        title: `${occBody || 'Occupation'} checklist — ${occName}`,
+        docs: occDocs.map((title) => ({
+          title,
+          fileName: '',
+          filePath: '',
+          needsReupload: false,
+        })),
+      });
+    }
+
     const byTitle = new Map();
-    checklist.forEach((title) => {
-      byTitle.set(title, { title, fileName: '', filePath: '', needsReupload: false });
+    sections.forEach((section) => {
+      section.docs.forEach((doc) => byTitle.set(doc.title, doc));
     });
+
+    const extras = [];
     (lead.uploadedDocuments || []).forEach((doc) => {
       if (!doc?.title) return;
-      const prev = byTitle.get(doc.title) || { title: doc.title };
-      byTitle.set(doc.title, { ...prev, ...doc });
+      if (byTitle.has(doc.title)) {
+        Object.assign(byTitle.get(doc.title), doc);
+      } else {
+        const extra = { title: doc.title, fileName: '', filePath: '', needsReupload: false, ...doc };
+        byTitle.set(doc.title, extra);
+        extras.push(extra);
+      }
     });
-    return Array.from(byTitle.values());
+
+    if (extras.length > 0) {
+      sections.push({ title: 'Other documents on this lead', docs: extras });
+    }
+    return sections;
+  };
+
+  const getPrReuploadDocOptions = (lead) =>
+    getPrReuploadDocSections(lead).flatMap((section) => section.docs);
+
+  const togglePrSectionDocs = (titles) => {
+    setPrWrongDocs((prev) => {
+      const allSelected = titles.every((t) => prev.includes(t));
+      if (allSelected) {
+        return prev.filter((t) => !titles.includes(t));
+      }
+      return [...new Set([...prev, ...titles])];
+    });
   };
 
   const handleSendPrReuploadMail = async (e) => {
@@ -1854,6 +2110,7 @@ const AdminDashboard = ({ onLogout }) => {
     fetchVisaPathwaysList();
     fetchPrLeads();
     fetchStudentLeads();
+    fetchUniversityLeads();
     fetchNotifications();
     fetchActivityLogs();
 
@@ -1954,6 +2211,39 @@ const AdminDashboard = ({ onLogout }) => {
       );
     });
 
+    socket.on('new_university_lead', (newLead) => {
+      setUniversityLeads((prev) => {
+        if (prev.some((l) => l._id === newLead._id)) return prev;
+        return [newLead, ...prev];
+      });
+      setSocketNotification({
+        title: 'New Scholarship Lead',
+        message: `${newLead.name} submitted a scholarship enquiry.`,
+        booking: null,
+        openUniversityLeads: true,
+      });
+      setTimeout(() => setSocketNotification(null), 8000);
+    });
+
+    socket.on('university_lead_deleted', (deletedId) => {
+      const id = String(deletedId);
+      setUniversityLeads((prev) => prev.filter((l) => String(l._id) !== id));
+      setSelectedUniversityLead((current) =>
+        current && String(current._id) === id ? null : current
+      );
+    });
+
+    socket.on('university_lead_updated', (updatedLead) => {
+      setUniversityLeads((prev) => {
+        const exists = prev.some((l) => l._id === updatedLead._id);
+        if (!exists) return [updatedLead, ...prev];
+        return prev.map((l) => (l._id === updatedLead._id ? updatedLead : l));
+      });
+      setSelectedUniversityLead((current) =>
+        current && current._id === updatedLead._id ? updatedLead : current
+      );
+    });
+
     socket.on('new_australia_pr_lead', (newLead) => {
       setPrLeads((prev) => {
         if (prev.some((l) => l._id === newLead._id)) return prev;
@@ -1998,6 +2288,7 @@ const AdminDashboard = ({ onLogout }) => {
           booking: null,
           openStudents: newNotif.link === 'students',
           openPrLeads: newNotif.link === 'australia-pr',
+          openUniversityLeads: newNotif.link === 'university-leads',
         });
         setTimeout(() => setSocketNotification(null), 8000);
       }
@@ -2314,6 +2605,23 @@ const AdminDashboard = ({ onLogout }) => {
   });
   const currentStudentLeads = getPageSlice(filteredStudentLeads);
 
+  const filteredUniversityLeads = universityLeads.filter((lead) => {
+    const q = universitySearchTerm.toLowerCase();
+    const countriesText = Array.isArray(lead.preferredCountries)
+      ? lead.preferredCountries.join(' ')
+      : lead.preferredCountries || '';
+    return (
+      lead.name?.toLowerCase().includes(q) ||
+      lead.email?.toLowerCase().includes(q) ||
+      lead.phone?.includes(universitySearchTerm) ||
+      lead.education?.toLowerCase().includes(q) ||
+      lead.budget?.toLowerCase().includes(q) ||
+      lead.timeline?.toLowerCase().includes(q) ||
+      countriesText.toLowerCase().includes(q)
+    );
+  });
+  const currentUniversityLeads = getPageSlice(filteredUniversityLeads);
+
   const filteredLogs = activityLogs.filter(log => {
     const q = logSearchTerm.toLowerCase();
     const matchesSearch = 
@@ -2327,7 +2635,7 @@ const AdminDashboard = ({ onLogout }) => {
       return matchesSearch && ['LOGIN', 'UPDATE_PROFILE', 'CHANGE_PASSWORD'].includes(log.action);
     }
     if (logActionFilter === 'emails') {
-      return matchesSearch && ['SEND_PR_EMAIL', 'SEND_STUDENT_EMAIL', 'SEND_POST_MEETING_EMAIL', 'SCHEDULE_MEETING', 'REQUEST_PR_REUPLOAD', 'REQUEST_STUDENT_REUPLOAD'].includes(log.action);
+      return matchesSearch && ['SEND_PR_EMAIL', 'SEND_STUDENT_EMAIL', 'SEND_UNIVERSITY_EMAIL', 'SEND_POST_MEETING_EMAIL', 'SCHEDULE_MEETING', 'REQUEST_PR_REUPLOAD', 'REQUEST_STUDENT_REUPLOAD'].includes(log.action);
     }
     if (logActionFilter === 'bookings') {
       return matchesSearch && log.action.includes('BOOKING');
@@ -2337,6 +2645,9 @@ const AdminDashboard = ({ onLogout }) => {
     }
     if (logActionFilter === 'students') {
       return matchesSearch && (log.action.includes('STUDENT') || log.action.includes('STUDY_ABROAD'));
+    }
+    if (logActionFilter === 'university') {
+      return matchesSearch && log.action.includes('UNIVERSITY');
     }
     return matchesSearch && log.action === logActionFilter;
   });
@@ -2484,6 +2795,13 @@ const AdminDashboard = ({ onLogout }) => {
             <GraduationCap size={18} style={{ flexShrink: 0 }} />
             <span className="nav-label">Students</span>
           </button>
+          <button
+            className={`admin-sidebar-nav-btn ${activeTab === 'university-leads' ? 'active' : ''}`}
+            onClick={() => setActiveTab('university-leads')}
+          >
+            <BookOpen size={18} style={{ flexShrink: 0 }} />
+            <span className="nav-label">Scholarship Leads</span>
+          </button>
           {localStorage.getItem('adminRole') === 'superadmin' && (
             <button 
               className={`admin-sidebar-nav-btn ${activeTab === 'activity-logs' ? 'active' : ''}`}
@@ -2534,6 +2852,7 @@ const AdminDashboard = ({ onLogout }) => {
             {activeTab === 'visa-pathways' && 'Visa Pathways & Country Guidance'}
             {activeTab === 'australia-pr' && 'Australia PR Leads'}
             {activeTab === 'students' && 'Students — Study Abroad'}
+            {activeTab === 'university-leads' && 'Scholarship Leads'}
             {activeTab === 'activity-logs' && 'Admin Activity Logs'}
           </h2>
 
@@ -2649,6 +2968,18 @@ const AdminDashboard = ({ onLogout }) => {
                   }}
                 >
                   Open PR Leads
+                </button>
+              )}
+              {socketNotification.openUniversityLeads && (
+                <button
+                  className="admin-action-btn"
+                  style={{ fontSize: '11px', padding: '4px 8px' }}
+                  onClick={() => {
+                    setActiveTab('university-leads');
+                    setSocketNotification(null);
+                  }}
+                >
+                  Open Scholarship Leads
                 </button>
               )}
             </div>
@@ -3103,16 +3434,16 @@ const AdminDashboard = ({ onLogout }) => {
                   <table className="admin-table rows-single-line">
                     <thead>
                       <tr>
-                        <th style={{ width: 88 }}>Date</th>
-                        <th style={{ width: 160 }}>Candidate</th>
-                        <th style={{ width: 120 }}>Contact</th>
-                        <th style={{ width: 150 }}>Occupation</th>
-                        <th style={{ width: 180 }}>Pathway</th>
-                        <th style={{ width: 100 }}>Source</th>
-                        <th style={{ width: 110 }}>Payment</th>
-                        <th style={{ width: 56 }}>Docs</th>
-                        <th style={{ width: 100 }}>Status</th>
-                        <th style={{ width: 148 }}>Actions</th>
+                        <th style={{ width: '7%' }}>Date</th>
+                        <th style={{ width: '12%' }}>Candidate</th>
+                        <th style={{ width: '13%' }}>Contact</th>
+                        <th style={{ width: '12%' }}>Occupation</th>
+                        <th style={{ width: '11%' }}>Pathway</th>
+                        <th style={{ width: '8%' }}>Source</th>
+                        <th style={{ width: '8%' }}>Payment</th>
+                        <th style={{ width: '5%' }}>Docs</th>
+                        <th style={{ width: '10%' }}>Status</th>
+                        <th>Actions</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -3298,14 +3629,14 @@ const AdminDashboard = ({ onLogout }) => {
                   <table className="admin-table rows-single-line">
                     <thead>
                       <tr>
-                        <th style={{ width: 88 }}>Date</th>
-                        <th style={{ width: 160 }}>Student</th>
-                        <th style={{ width: 200 }}>Contact</th>
-                        <th style={{ width: 180 }}>Course</th>
-                        <th style={{ width: 120 }}>Country</th>
-                        <th style={{ width: 72 }}>Docs</th>
-                        <th style={{ width: 100 }}>Status</th>
-                        <th style={{ width: 148 }}>Actions</th>
+                        <th style={{ width: '10%' }}>Date</th>
+                        <th style={{ width: '15%' }}>Student</th>
+                        <th style={{ width: '18%' }}>Contact</th>
+                        <th style={{ width: '16%' }}>Course</th>
+                        <th style={{ width: '11%' }}>Country</th>
+                        <th style={{ width: '6%' }}>Docs</th>
+                        <th style={{ width: '10%' }}>Status</th>
+                        <th>Actions</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -3424,6 +3755,147 @@ const AdminDashboard = ({ onLogout }) => {
             </>
           )}
 
+          {activeTab === 'university-leads' && (
+            <>
+              <section className="admin-controls-card">
+                <div className="admin-search-wrapper">
+                  <Search className="admin-search-icon" size={18} />
+                  <input
+                    type="text"
+                    placeholder="Search by name, email, phone, education, budget, timeline, countries..."
+                    value={universitySearchTerm}
+                    onChange={(e) => {
+                      setUniversitySearchTerm(e.target.value);
+                      setCurrentPage(1);
+                    }}
+                  />
+                </div>
+
+                <div style={{ fontSize: 13, color: '#64748b', fontWeight: 600, flexShrink: 0 }}>
+                  {filteredUniversityLeads.length} lead{filteredUniversityLeads.length === 1 ? '' : 's'}
+                </div>
+              </section>
+
+              <section className="admin-table-container is-scrollable">
+                {universityLeadsLoading ? (
+                  <div className="no-bookings">Loading scholarship leads...</div>
+                ) : filteredUniversityLeads.length === 0 ? (
+                  <div className="no-bookings">No scholarship leads yet</div>
+                ) : (
+                  <table className="admin-table rows-single-line scholarship-leads-table">
+                    <thead>
+                      <tr>
+                        <th style={{ width: '8%' }}>Date</th>
+                        <th style={{ width: '12%' }}>Name</th>
+                        <th style={{ width: '18%' }}>Contact</th>
+                        <th style={{ width: '11%' }}>Countries</th>
+                        <th style={{ width: '11%' }}>Budget</th>
+                        <th style={{ width: '11%' }}>Timeline</th>
+                        <th style={{ width: '10%' }}>Status</th>
+                        <th>Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {currentUniversityLeads.map((lead) => {
+                        const countriesLabel = Array.isArray(lead.preferredCountries)
+                          ? lead.preferredCountries.join(', ')
+                          : lead.preferredCountries || '—';
+                        const contactLabel = `${lead.phone} · ${lead.email}`;
+
+                        return (
+                          <tr key={lead._id}>
+                            <td style={{ fontSize: 13 }}>
+                              {new Date(lead.createdAt).toLocaleDateString('en-IN', {
+                                day: 'numeric',
+                                month: 'short',
+                                year: '2-digit',
+                              })}
+                            </td>
+                            <td title={lead.name}>
+                              <span className="admin-table-cell-ellipsis" style={{ fontWeight: 700, color: '#0f172a' }}>
+                                {lead.name}
+                              </span>
+                            </td>
+                            <td title={contactLabel}>
+                              <span className="admin-table-cell-ellipsis">
+                                {lead.phone}
+                                <span className="admin-table-sep">·</span>
+                                <span style={{ color: '#64748b' }}>{lead.email}</span>
+                              </span>
+                            </td>
+                            <td title={countriesLabel} style={{ fontSize: 13 }}>
+                              <span className="admin-table-cell-ellipsis" style={{ fontWeight: 600 }}>
+                                {countriesLabel}
+                              </span>
+                            </td>
+                            <td title={lead.budget} style={{ fontSize: 13 }}>
+                              <span className="admin-table-cell-ellipsis">{lead.budget || '—'}</span>
+                            </td>
+                            <td title={lead.timeline} style={{ fontSize: 13 }}>
+                              <span className="admin-table-cell-ellipsis">{lead.timeline || '—'}</span>
+                            </td>
+                            <td>
+                              <span
+                                className={`badge ${
+                                  lead.status === 'New'
+                                    ? 'status-new'
+                                    : lead.status === 'Contacted'
+                                    ? 'status-processing'
+                                    : lead.status === 'Converted'
+                                    ? 'status-completed'
+                                    : 'pay-pending'
+                                }`}
+                              >
+                                {lead.status}
+                              </span>
+                            </td>
+                            <td>
+                              <div className="admin-table-actions">
+                                <button
+                                  className="admin-action-btn icon-only"
+                                  title="View"
+                                  onClick={() => openUniversityLeadModal(lead, 'view')}
+                                  style={{ padding: 6, background: '#0d7c3d', color: '#fff', border: 'none' }}
+                                >
+                                  <Eye size={14} />
+                                </button>
+                                <button
+                                  className="admin-action-btn icon-only"
+                                  title="Edit"
+                                  onClick={() => openUniversityLeadModal(lead, 'edit')}
+                                  style={{ padding: 6, background: '#f59e0b', color: '#fff', border: 'none' }}
+                                >
+                                  <Edit size={14} />
+                                </button>
+                                <button
+                                  className="admin-action-btn icon-only"
+                                  title="Send Email"
+                                  onClick={() => openUniversityLeadModal(lead, 'mail')}
+                                  style={{ padding: 6, background: '#2563eb', color: '#fff', border: 'none' }}
+                                >
+                                  <Mail size={14} />
+                                </button>
+                                <button
+                                  className="admin-action-btn icon-only delete-btn"
+                                  title="Delete"
+                                  onClick={() => handleDeleteUniversityLead(lead._id)}
+                                  style={{ padding: 6, background: '#ef4444', color: '#fff', border: 'none' }}
+                                >
+                                  <Trash2 size={14} />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                )}
+                {renderPagination(filteredUniversityLeads.length)}
+              </section>
+            </>
+          )}
+
           {activeTab === 'activity-logs' && (
             <>
               <section className="admin-controls-card">
@@ -3457,6 +3929,7 @@ const AdminDashboard = ({ onLogout }) => {
                       { value: 'bookings', label: 'Booking Actions' },
                       { value: 'pr', label: 'PR Leads Actions' },
                       { value: 'students', label: 'Student Leads Actions' },
+                      { value: 'university', label: 'Scholarship Lead Actions' },
                     ]}
                   />
 
@@ -3494,7 +3967,7 @@ const AdminDashboard = ({ onLogout }) => {
                       </thead>
                       <tbody>
                         {currentLogs.map((log) => {
-                          const isEmailAction = ['SEND_PR_EMAIL', 'SEND_STUDENT_EMAIL', 'SEND_POST_MEETING_EMAIL', 'SCHEDULE_MEETING', 'REQUEST_PR_REUPLOAD', 'REQUEST_STUDENT_REUPLOAD'].includes(log.action);
+                          const isEmailAction = ['SEND_PR_EMAIL', 'SEND_STUDENT_EMAIL', 'SEND_UNIVERSITY_EMAIL', 'SEND_POST_MEETING_EMAIL', 'SCHEDULE_MEETING', 'REQUEST_PR_REUPLOAD', 'REQUEST_STUDENT_REUPLOAD'].includes(log.action);
                           return (
                             <tr key={log._id}>
                               <td>
@@ -3806,19 +4279,16 @@ const AdminDashboard = ({ onLogout }) => {
               <div className="admin-modal-section" style={{ marginTop: 16 }}>
                 <h4>
                   Document Checklist
-                  {(selectedPrLead.uploadedDocuments || []).length > 0 && (
-                    <span style={{ fontWeight: 500, fontSize: 13, color: '#64748b', marginLeft: 8 }}>
-                      ({countUploadedLeadDocuments(selectedPrLead.uploadedDocuments)} uploaded / {(selectedPrLead.uploadedDocuments || []).length} total)
-                    </span>
-                  )}
+                  <span style={{ fontWeight: 500, fontSize: 13, color: '#64748b', marginLeft: 8 }}>
+                    ({countUploadedLeadDocuments(selectedPrLead.uploadedDocuments)} uploaded /{' '}
+                    {getPrReuploadDocOptions(selectedPrLead).length} in checklist)
+                  </span>
                 </h4>
-                {(selectedPrLead.uploadedDocuments || []).length === 0 ? (
-                  <p style={{ fontSize: 13, color: '#94a3b8', margin: 0 }}>No document checklist submitted</p>
+                {getPrReuploadDocOptions(selectedPrLead).length === 0 ? (
+                  <p style={{ fontSize: 13, color: '#94a3b8', margin: 0 }}>No document checklist for this occupation</p>
                 ) : (
                   <div className="pr-lead-doc-list">
-                    {selectedPrLead.uploadedDocuments
-                      .filter((doc) => doc.filePath)
-                      .map((doc, idx) => (
+                    {getPrReuploadDocOptions(selectedPrLead).map((doc, idx) => (
                         <div className="pr-lead-doc-item student-view-doc-item" key={`${doc.title}-${idx}`}>
                           <div className="student-view-doc-meta">
                             <span className="student-view-doc-title">{doc.title}</span>
@@ -4147,13 +4617,26 @@ const AdminDashboard = ({ onLogout }) => {
             <form onSubmit={handleSendPrReuploadMail}>
               <div className="admin-modal-body">
                 <p className="student-reupload-help">
-                  Select any document to request — whether the candidate already uploaded it or not.
-                  They will get a link to upload only those files. When they submit, this panel updates automatically.
+                  Checklist auto-loads from the candidate&apos;s occupation (same as the old public page).
+                  Select any documents to request by email — whether already uploaded or not.
                 </p>
+                {(selectedPrLead.occupation || selectedPrLead.country) && (
+                  <div className="student-reupload-country-pill">
+                    {selectedPrLead.occupation && (
+                      <span><strong>Occupation:</strong> {selectedPrLead.occupation}</span>
+                    )}
+                    {selectedPrLead.country && (
+                      <span><strong>Country:</strong> {selectedPrLead.country}</span>
+                    )}
+                    {selectedPrLead.state && (
+                      <span><strong>State:</strong> {selectedPrLead.state}</span>
+                    )}
+                  </div>
+                )}
 
                 {(() => {
-                  const options = getPrReuploadDocOptions(selectedPrLead);
-                  if (options.length === 0) {
+                  const sections = getPrReuploadDocSections(selectedPrLead);
+                  if (sections.length === 0) {
                     return (
                       <p className="student-reupload-empty">
                         No document checklist found for this occupation.
@@ -4162,29 +4645,48 @@ const AdminDashboard = ({ onLogout }) => {
                   }
                   return (
                     <div className="student-reupload-doc-list">
-                      {options.map((doc, idx) => {
-                        const checked = prWrongDocs.includes(doc.title);
-                        const hasFile = Boolean(doc.filePath);
+                      {sections.map((section) => {
+                        const titles = section.docs.map((d) => d.title);
+                        const selectedCount = titles.filter((t) => prWrongDocs.includes(t)).length;
+                        const allSelected = titles.length > 0 && selectedCount === titles.length;
                         return (
-                          <label
-                            key={`${doc.title}-${idx}`}
-                            className={`student-reupload-doc-item${checked ? ' selected' : ''}`}
-                          >
-                            <input
-                              type="checkbox"
-                              checked={checked}
-                              onChange={() => togglePrWrongDoc(doc.title)}
-                            />
-                            <span className="student-reupload-doc-text">
-                              <strong>{doc.title}</strong>
-                              <small>
-                                {hasFile
-                                  ? `Uploaded${doc.fileName ? `: ${doc.fileName}` : ''}`
-                                  : 'Not uploaded yet'}
-                                {doc.needsReupload ? ' · Re-upload already requested' : ''}
-                              </small>
-                            </span>
-                          </label>
+                          <div className="student-reupload-section" key={section.title}>
+                            <div className="student-reupload-section-head">
+                              <p className="student-reupload-section-title">{section.title}</p>
+                              <button
+                                type="button"
+                                className="student-reupload-section-select"
+                                onClick={() => togglePrSectionDocs(titles)}
+                              >
+                                {allSelected ? 'Clear section' : `Select all (${titles.length})`}
+                              </button>
+                            </div>
+                            {section.docs.map((doc, idx) => {
+                              const checked = prWrongDocs.includes(doc.title);
+                              const hasFile = Boolean(doc.filePath);
+                              return (
+                                <label
+                                  key={`${doc.title}-${idx}`}
+                                  className={`student-reupload-doc-item${checked ? ' selected' : ''}`}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={checked}
+                                    onChange={() => togglePrWrongDoc(doc.title)}
+                                  />
+                                  <span className="student-reupload-doc-text">
+                                    <strong>{doc.title}</strong>
+                                    <small>
+                                      {hasFile
+                                        ? `Uploaded${doc.fileName ? `: ${doc.fileName}` : ''}`
+                                        : 'Not uploaded yet'}
+                                      {doc.needsReupload ? ' · Re-upload already requested' : ''}
+                                    </small>
+                                  </span>
+                                </label>
+                              );
+                            })}
+                          </div>
                         );
                       })}
                     </div>
@@ -4934,20 +5436,28 @@ const AdminDashboard = ({ onLogout }) => {
               )}
 
               <div className="admin-modal-section student-view-docs">
-                <h4>Uploaded Documents ({countUploadedLeadDocuments(selectedStudentLead.uploadedDocuments)})</h4>
-                {(selectedStudentLead.uploadedDocuments || []).filter((doc) => isViewableLeadDocument(doc) || doc.needsReupload).length === 0 ? (
-                  <p className="student-reupload-empty">No documents attached</p>
+                <h4>
+                  Document Checklist ({selectedStudentLead.country || 'No country'})
+                  <span style={{ fontWeight: 500, fontSize: 13, color: '#64748b', marginLeft: 8 }}>
+                    ({countUploadedLeadDocuments(selectedStudentLead.uploadedDocuments)} uploaded /{' '}
+                    {getStudentReuploadDocOptions(selectedStudentLead).length} in checklist)
+                  </span>
+                </h4>
+                {getStudentReuploadDocOptions(selectedStudentLead).length === 0 ? (
+                  <p className="student-reupload-empty">No document checklist for this country</p>
                 ) : (
                   <div className="pr-lead-doc-list">
-                    {selectedStudentLead.uploadedDocuments
-                      .filter((doc) => isViewableLeadDocument(doc) || doc.needsReupload)
-                      .map((doc, idx) => (
+                    {getStudentReuploadDocOptions(selectedStudentLead).map((doc, idx) => (
                       <div className="pr-lead-doc-item student-view-doc-item" key={`${doc.title}-${idx}`}>
                         <div className="student-view-doc-meta">
                           <span className="student-view-doc-title">{doc.title}</span>
                           {doc.fileName && <small className="student-view-doc-file">{doc.fileName}</small>}
-                          {doc.needsReupload && (
+                          {isViewableLeadDocument(doc) ? (
+                            <span className="badge status-completed" style={{ alignSelf: 'flex-start' }}>Uploaded</span>
+                          ) : doc.needsReupload ? (
                             <span className="student-view-doc-badge">Re-upload requested</span>
+                          ) : (
+                            <span className="badge pay-pending" style={{ alignSelf: 'flex-start' }}>Not uploaded</span>
                           )}
                         </div>
                         {isViewableLeadDocument(doc) ? (
@@ -5238,13 +5748,22 @@ const AdminDashboard = ({ onLogout }) => {
             <form onSubmit={handleSendStudentReuploadMail}>
               <div className="admin-modal-body">
                 <p className="student-reupload-help">
-                  Select any document to request — whether the student already uploaded it or not.
-                  They will get a link to upload only those files. When they submit, this panel updates automatically.
+                  Checklist auto-loads from the student&apos;s destination country (same as the old public page).
+                  Select any documents to request by email — whether already uploaded or not.
                 </p>
+                {selectedStudentLead.country && (
+                  <div className="student-reupload-country-pill">
+                    <span><strong>Destination country:</strong> {selectedStudentLead.country}</span>
+                    <span>
+                      <strong>Checklist:</strong>{' '}
+                      {getAllStudyAbroadDocs(selectedStudentLead.country).length} documents
+                    </span>
+                  </div>
+                )}
 
                 {(() => {
-                  const options = getStudentReuploadDocOptions(selectedStudentLead);
-                  if (options.length === 0) {
+                  const sections = getStudentReuploadDocSections(selectedStudentLead);
+                  if (sections.length === 0) {
                     return (
                       <p className="student-reupload-empty">
                         No document checklist found for this country.
@@ -5253,29 +5772,48 @@ const AdminDashboard = ({ onLogout }) => {
                   }
                   return (
                     <div className="student-reupload-doc-list">
-                      {options.map((doc, idx) => {
-                        const checked = studentWrongDocs.includes(doc.title);
-                        const hasFile = Boolean(doc.filePath);
+                      {sections.map((section) => {
+                        const titles = section.docs.map((d) => d.title);
+                        const selectedCount = titles.filter((t) => studentWrongDocs.includes(t)).length;
+                        const allSelected = titles.length > 0 && selectedCount === titles.length;
                         return (
-                          <label
-                            key={`${doc.title}-${idx}`}
-                            className={`student-reupload-doc-item${checked ? ' selected' : ''}`}
-                          >
-                            <input
-                              type="checkbox"
-                              checked={checked}
-                              onChange={() => toggleStudentWrongDoc(doc.title)}
-                            />
-                            <span className="student-reupload-doc-text">
-                              <strong>{doc.title}</strong>
-                              <small>
-                                {hasFile
-                                  ? `Uploaded${doc.fileName ? `: ${doc.fileName}` : ''}`
-                                  : 'Not uploaded yet'}
-                                {doc.needsReupload ? ' · Re-upload already requested' : ''}
-                              </small>
-                            </span>
-                          </label>
+                          <div className="student-reupload-section" key={section.title}>
+                            <div className="student-reupload-section-head">
+                              <p className="student-reupload-section-title">{section.title}</p>
+                              <button
+                                type="button"
+                                className="student-reupload-section-select"
+                                onClick={() => toggleStudentSectionDocs(titles)}
+                              >
+                                {allSelected ? 'Clear section' : `Select all (${titles.length})`}
+                              </button>
+                            </div>
+                            {section.docs.map((doc, idx) => {
+                              const checked = studentWrongDocs.includes(doc.title);
+                              const hasFile = Boolean(doc.filePath);
+                              return (
+                                <label
+                                  key={`${doc.title}-${idx}`}
+                                  className={`student-reupload-doc-item${checked ? ' selected' : ''}`}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={checked}
+                                    onChange={() => toggleStudentWrongDoc(doc.title)}
+                                  />
+                                  <span className="student-reupload-doc-text">
+                                    <strong>{doc.title}</strong>
+                                    <small>
+                                      {hasFile
+                                        ? `Uploaded${doc.fileName ? `: ${doc.fileName}` : ''}`
+                                        : 'Not uploaded yet'}
+                                      {doc.needsReupload ? ' · Re-upload already requested' : ''}
+                                    </small>
+                                  </span>
+                                </label>
+                              );
+                            })}
+                          </div>
                         );
                       })}
                     </div>
@@ -5303,6 +5841,360 @@ const AdminDashboard = ({ onLogout }) => {
                   disabled={studentMailSending || studentWrongDocs.length === 0}
                 >
                   {studentMailSending ? 'Sending...' : `Send link (${studentWrongDocs.length})`}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* UNIVERSITY SHORTLIST MODALS */}
+      {selectedUniversityLead && universityModalMode === 'view' && (
+        <div className="admin-modal-overlay">
+          <div className="admin-modal student-view-modal">
+            <div className="admin-modal-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div>
+                <h3>Scholarship Lead</h3>
+                <p className="pr-lead-modal-subtitle">
+                  {Array.isArray(selectedUniversityLead.preferredCountries)
+                    ? selectedUniversityLead.preferredCountries.join(', ')
+                    : selectedUniversityLead.preferredCountries || '—'}
+                </p>
+              </div>
+              <button className="admin-modal-close" onClick={closeUniversityLeadModal}>✕</button>
+            </div>
+
+            <div className="admin-modal-body">
+              <div className="pr-lead-view-banner">
+                <div>
+                  <strong>{selectedUniversityLead.name}</strong>
+                  <span>{selectedUniversityLead.education || 'University shortlist enquiry'}</span>
+                </div>
+                <span className={`badge ${
+                  selectedUniversityLead.status === 'New' ? 'status-new'
+                    : selectedUniversityLead.status === 'Contacted' ? 'status-processing'
+                    : selectedUniversityLead.status === 'Converted' ? 'status-completed'
+                    : 'pay-pending'
+                }`}>
+                  {selectedUniversityLead.status}
+                </span>
+              </div>
+
+              <div className="admin-modal-grid">
+                <div className="admin-modal-section">
+                  <h4><Users size={14} style={{ verticalAlign: 'middle', marginRight: 6 }} /> Contact</h4>
+                  <div className="detail-item"><span className="detail-label">Name</span><span className="detail-val">{selectedUniversityLead.name}</span></div>
+                  <div className="detail-item"><span className="detail-label">Phone</span><span className="detail-val">{selectedUniversityLead.phone}</span></div>
+                  <div className="detail-item"><span className="detail-label">Email</span><span className="detail-val">{selectedUniversityLead.email}</span></div>
+                  <div className="detail-item"><span className="detail-label">Age</span><span className="detail-val">{selectedUniversityLead.age || '—'}</span></div>
+                  <div className="detail-item"><span className="detail-label">Address</span><span className="detail-val">{selectedUniversityLead.address || '—'}</span></div>
+                  <div className="detail-item">
+                    <span className="detail-label">Submitted</span>
+                    <span className="detail-val">{new Date(selectedUniversityLead.createdAt).toLocaleString()}</span>
+                  </div>
+                </div>
+                <div className="admin-modal-section">
+                  <h4><BookOpen size={14} style={{ verticalAlign: 'middle', marginRight: 6 }} /> Profile &amp; Preferences</h4>
+                  <div className="detail-item"><span className="detail-label">Education</span><span className="detail-val">{selectedUniversityLead.education || '—'}</span></div>
+                  <div className="detail-item"><span className="detail-label">Status</span><span className="detail-val">{selectedUniversityLead.currentStatus || '—'}</span></div>
+                  <div className="detail-item"><span className="detail-label">Skills</span><span className="detail-val">{selectedUniversityLead.skills || '—'}</span></div>
+                  <div className="detail-item">
+                    <span className="detail-label">Countries</span>
+                    <span className="detail-val">
+                      {Array.isArray(selectedUniversityLead.preferredCountries)
+                        ? selectedUniversityLead.preferredCountries.join(', ')
+                        : selectedUniversityLead.preferredCountries || '—'}
+                    </span>
+                  </div>
+                  <div className="detail-item"><span className="detail-label">Budget</span><span className="detail-val">{selectedUniversityLead.budget || '—'}</span></div>
+                  <div className="detail-item"><span className="detail-label">Timeline</span><span className="detail-val">{selectedUniversityLead.timeline || '—'}</span></div>
+                </div>
+              </div>
+
+              {selectedUniversityLead.notes && (
+                <div className="admin-modal-section student-view-notes">
+                  <h4>Candidate Notes</h4>
+                  <p className="pr-lead-notes-block">{selectedUniversityLead.notes}</p>
+                </div>
+              )}
+
+              {selectedUniversityLead.adminNotes && (
+                <div className="admin-modal-section student-view-notes">
+                  <h4>Admin Notes</h4>
+                  <p className="pr-lead-notes-block">{selectedUniversityLead.adminNotes}</p>
+                </div>
+              )}
+            </div>
+            <div className="edit-profile-footer">
+              <button type="button" className="edit-profile-cancel-btn" onClick={closeUniversityLeadModal}>
+                Close
+              </button>
+              <button
+                type="button"
+                className="edit-profile-save-btn"
+                onClick={() => openUniversityLeadModal(selectedUniversityLead, 'mail')}
+                style={{ background: '#2563eb' }}
+              >
+                Send Email
+              </button>
+              <button
+                type="button"
+                className="edit-profile-save-btn"
+                onClick={() => openUniversityLeadModal(selectedUniversityLead, 'edit')}
+              >
+                Edit
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {selectedUniversityLead && universityModalMode === 'edit' && universityEditData && (
+        <div className="admin-modal-overlay">
+          <div className="admin-modal edit-profile-modal">
+            <div className="admin-modal-header">
+              <h3>Edit Scholarship Lead</h3>
+              <button className="admin-modal-close" onClick={closeUniversityLeadModal}>✕</button>
+            </div>
+            <form onSubmit={handleUpdateUniversityLead}>
+              <div className="admin-modal-body">
+                <div className="edit-profile-grid">
+                  <div className="edit-profile-field">
+                    <label htmlFor="university-edit-name">Name</label>
+                    <input
+                      id="university-edit-name"
+                      value={universityEditData.name}
+                      onChange={(e) => setUniversityEditData({ ...universityEditData, name: e.target.value })}
+                      required
+                    />
+                  </div>
+                  <div className="edit-profile-field">
+                    <label htmlFor="university-edit-phone">Phone</label>
+                    <input
+                      id="university-edit-phone"
+                      value={universityEditData.phone}
+                      onChange={(e) => setUniversityEditData({ ...universityEditData, phone: e.target.value })}
+                      required
+                    />
+                  </div>
+                  <div className="edit-profile-field">
+                    <label htmlFor="university-edit-email">Email</label>
+                    <input
+                      id="university-edit-email"
+                      type="email"
+                      value={universityEditData.email}
+                      onChange={(e) => setUniversityEditData({ ...universityEditData, email: e.target.value })}
+                      required
+                    />
+                  </div>
+                  <div className="edit-profile-field">
+                    <label htmlFor="university-edit-age">Age</label>
+                    <input
+                      id="university-edit-age"
+                      value={universityEditData.age || ''}
+                      onChange={(e) => setUniversityEditData({ ...universityEditData, age: e.target.value })}
+                    />
+                  </div>
+                  <div className="edit-profile-field edit-profile-field-full">
+                    <label htmlFor="university-edit-address">Address</label>
+                    <input
+                      id="university-edit-address"
+                      value={universityEditData.address || ''}
+                      onChange={(e) => setUniversityEditData({ ...universityEditData, address: e.target.value })}
+                    />
+                  </div>
+                  <div className="edit-profile-field">
+                    <label htmlFor="university-edit-education">Education</label>
+                    <input
+                      id="university-edit-education"
+                      value={universityEditData.education}
+                      onChange={(e) => setUniversityEditData({ ...universityEditData, education: e.target.value })}
+                    />
+                  </div>
+                  <div className="edit-profile-field">
+                    <label htmlFor="university-edit-current-status">Current Status</label>
+                    <input
+                      id="university-edit-current-status"
+                      value={universityEditData.currentStatus || ''}
+                      onChange={(e) => setUniversityEditData({ ...universityEditData, currentStatus: e.target.value })}
+                    />
+                  </div>
+                  <div className="edit-profile-field edit-profile-field-full">
+                    <label htmlFor="university-edit-skills">Skills</label>
+                    <input
+                      id="university-edit-skills"
+                      value={universityEditData.skills || ''}
+                      onChange={(e) => setUniversityEditData({ ...universityEditData, skills: e.target.value })}
+                    />
+                  </div>
+                  <div className="edit-profile-field edit-profile-field-full">
+                    <label htmlFor="university-edit-countries">Preferred Countries</label>
+                    <input
+                      id="university-edit-countries"
+                      value={universityEditData.preferredCountries}
+                      onChange={(e) => setUniversityEditData({ ...universityEditData, preferredCountries: e.target.value })}
+                      placeholder="e.g. Australia, Canada, UK"
+                    />
+                  </div>
+                  <div className="edit-profile-field">
+                    <label htmlFor="university-edit-budget">Budget</label>
+                    <input
+                      id="university-edit-budget"
+                      value={universityEditData.budget}
+                      onChange={(e) => setUniversityEditData({ ...universityEditData, budget: e.target.value })}
+                    />
+                  </div>
+                  <div className="edit-profile-field">
+                    <label htmlFor="university-edit-timeline">Timeline</label>
+                    <input
+                      id="university-edit-timeline"
+                      value={universityEditData.timeline}
+                      onChange={(e) => setUniversityEditData({ ...universityEditData, timeline: e.target.value })}
+                    />
+                  </div>
+                  <div className="edit-profile-field edit-profile-field-full">
+                    <label htmlFor="university-edit-status">Status</label>
+                    <select
+                      id="university-edit-status"
+                      value={universityEditData.status}
+                      onChange={(e) => setUniversityEditData({ ...universityEditData, status: e.target.value })}
+                    >
+                      <option value="New">New</option>
+                      <option value="Contacted">Contacted</option>
+                      <option value="Converted">Converted</option>
+                      <option value="Closed">Closed</option>
+                    </select>
+                  </div>
+                  <div className="edit-profile-field edit-profile-field-full">
+                    <label htmlFor="university-edit-notes">Candidate Notes</label>
+                    <textarea
+                      id="university-edit-notes"
+                      rows={3}
+                      value={universityEditData.notes}
+                      onChange={(e) => setUniversityEditData({ ...universityEditData, notes: e.target.value })}
+                      placeholder="Notes from the candidate..."
+                    />
+                  </div>
+                  <div className="edit-profile-field edit-profile-field-full">
+                    <label htmlFor="university-edit-admin-notes">Admin Notes</label>
+                    <textarea
+                      id="university-edit-admin-notes"
+                      rows={4}
+                      value={universityEditData.adminNotes}
+                      onChange={(e) => setUniversityEditData({ ...universityEditData, adminNotes: e.target.value })}
+                      placeholder="Internal notes for this lead..."
+                    />
+                  </div>
+                </div>
+              </div>
+              <div className="edit-profile-footer">
+                <button type="button" className="edit-profile-cancel-btn" onClick={closeUniversityLeadModal}>
+                  Cancel
+                </button>
+                <button type="submit" className="edit-profile-save-btn">
+                  Save Changes
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {selectedUniversityLead && universityModalMode === 'mail' && (
+        <div className="admin-modal-overlay">
+          <div className="admin-modal followup-modal">
+            <div className="admin-modal-header">
+              <div>
+                <h3>Send Scholarship Lead Follow-Up</h3>
+                <p className="followup-modal-subtitle">
+                  Compose an email to send to the candidate
+                </p>
+              </div>
+              <button className="admin-modal-close" onClick={closeUniversityLeadModal}>✕</button>
+            </div>
+            <form onSubmit={handleSendUniversityMail}>
+              <div className="admin-modal-body">
+                <div className="followup-mail-compose">
+                  <div className="followup-mail-row">
+                    <label className="followup-mail-label">To</label>
+                    <input
+                      type="text"
+                      className="followup-input followup-input-readonly"
+                      value={selectedUniversityLead.email}
+                      readOnly
+                    />
+                  </div>
+
+                  <div className="followup-mail-row">
+                    <label className="followup-mail-label">Subject <span className="req">*</span></label>
+                    <input
+                      type="text"
+                      className="followup-input"
+                      placeholder="Email subject line..."
+                      value={universityMailSubject}
+                      onChange={(e) => setUniversityMailSubject(e.target.value)}
+                      required
+                    />
+                  </div>
+
+                  <div className="followup-mail-row followup-mail-row-stack">
+                    <label className="followup-mail-label">Description <span className="req">*</span></label>
+                    <textarea
+                      className="followup-textarea followup-mail-body"
+                      placeholder="Write your message — shortlist guidance, next steps, document notes..."
+                      value={universityMailMessage}
+                      onChange={(e) => setUniversityMailMessage(e.target.value)}
+                    />
+                  </div>
+
+                  <div className="followup-mail-row followup-mail-row-stack">
+                    <label className="followup-mail-label">
+                      <UploadCloud size={16} />
+                      Attachments
+                    </label>
+                    <label className="followup-upload-zone">
+                      <UploadCloud size={28} />
+                      <span className="followup-upload-title">Click to attach files</span>
+                      <span className="followup-upload-hint">PDF only — up to 10 files, 10MB each</span>
+                      <input
+                        type="file"
+                        multiple
+                        accept=".pdf"
+                        onChange={(e) => {
+                          const selected = Array.from(e.target.files || []);
+                          setUniversityMailFiles((prev) => [...prev, ...selected].slice(0, 10));
+                          e.target.value = '';
+                        }}
+                      />
+                    </label>
+
+                    {universityMailFiles.length > 0 && (
+                      <div className="followup-file-list">
+                        {universityMailFiles.map((file, index) => (
+                          <div className="followup-file-item" key={`${file.name}-${index}`}>
+                            <div className="followup-file-info">
+                              <FileText size={16} />
+                              <span>{file.name}</span>
+                              <small>{(file.size / 1024 / 1024).toFixed(2)} MB</small>
+                            </div>
+                            <button
+                              type="button"
+                              className="followup-file-remove"
+                              onClick={() => setUniversityMailFiles((prev) => prev.filter((_, i) => i !== index))}
+                            >
+                              Remove
+                            </button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+              <div className="followup-modal-footer">
+                <button type="button" className="followup-cancel-btn" onClick={closeUniversityLeadModal}>Cancel</button>
+                <button type="submit" className="followup-send-btn" disabled={universityMailSending}>
+                  {universityMailSending ? 'Sending...' : 'Send Email'}
                 </button>
               </div>
             </form>

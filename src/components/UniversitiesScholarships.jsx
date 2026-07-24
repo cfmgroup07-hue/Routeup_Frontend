@@ -1,14 +1,51 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import toast from 'react-hot-toast';
 import SiteNavbar from './SiteNavbar';
 import SiteFooter from './SiteFooter';
-import {
-  UNIVERSITIES,
-  SCHOLARSHIPS,
-  UNI_COUNTRIES,
-  SCH_COUNTRIES,
-} from '../data/universitiesScholarships';
+import CustomSelect from './CustomSelect';
+import { API_URL } from '../config';
+import { UNIVERSITIES, UNI_COUNTRIES } from '../data/universitiesScholarships';
 import './UniversitiesScholarships.css';
+
+const UNI_PAGE_SIZE = 15;
+
+const toOptions = (list) => list.map((item) => ({ value: item, label: item }));
+
+const EDUCATION_OPTIONS = toOptions([
+  'Below 10th',
+  '10th Pass',
+  '12th Pass',
+  'ITI / Diploma',
+  'Graduate (BA/BSc/BCom)',
+  'Engineering Degree',
+  'Post Graduate',
+  'Other',
+]);
+
+const STATUS_OPTIONS = toOptions([
+  'Student',
+  'Unemployed - Looking for work',
+  'Working - Want to switch',
+  'Working - Want overseas job',
+  'Freelancer / Self-employed',
+  'Other',
+]);
+
+const BUDGET_OPTIONS = toOptions([
+  'Under ₹20 lakh',
+  '₹20–40 lakh',
+  '₹40–60 lakh',
+  '₹60 lakh+',
+  'Not sure yet',
+]);
+
+const TIMELINE_OPTIONS = toOptions([
+  '2026 intake',
+  '2027 intake',
+  'Within 6 months',
+  'Within 1 year',
+  'Just exploring',
+]);
 
 const GUIDE_CARDS = [
   {
@@ -80,10 +117,20 @@ const GUIDE_CARDS = [
   },
 ];
 
-function siteHref(site) {
-  if (!site || site.toLowerCase().startsWith('see ')) return null;
-  return site.startsWith('http') ? site : `https://${site}`;
-}
+const emptyForm = () => ({
+  name: '',
+  phone: '',
+  email: '',
+  age: '',
+  address: '',
+  education: '',
+  currentStatus: '',
+  skills: '',
+  preferredCountries: '',
+  budget: '',
+  timeline: '',
+  notes: '',
+});
 
 const FilterPills = ({ countries, active, onSelect }) => (
   <div className="usd-filter-pills">
@@ -101,19 +148,24 @@ const FilterPills = ({ countries, active, onSelect }) => (
 );
 
 const UniversitiesScholarships = () => {
-  const navigate = useNavigate();
   const [uniCountry, setUniCountry] = useState('All');
   const [uniQuery, setUniQuery] = useState('');
-  const [schCountry, setSchCountry] = useState('All');
-  const [schQuery, setSchQuery] = useState('');
+  const [uniPage, setUniPage] = useState(1);
+  const [form, setForm] = useState(emptyForm);
+  const [submitting, setSubmitting] = useState(false);
+  const [formKey, setFormKey] = useState(0);
 
   useEffect(() => {
     window.scrollTo({ top: 0, behavior: 'instant' });
-    document.title = 'Universities & Scholarships Directory 2026–27 | RouteUp';
+    document.title = 'Universities Directory 2026–27 | RouteUp';
     return () => {
       document.title = 'RouteUp';
     };
   }, []);
+
+  useEffect(() => {
+    setUniPage(1);
+  }, [uniCountry, uniQuery]);
 
   const filteredUnis = useMemo(() => {
     const q = uniQuery.trim().toLowerCase();
@@ -124,21 +176,89 @@ const UniversitiesScholarships = () => {
     );
   }, [uniCountry, uniQuery]);
 
-  const filteredSchs = useMemo(() => {
-    const q = schQuery.trim().toLowerCase();
-    return SCHOLARSHIPS.filter(
-      (s) =>
-        (schCountry === 'All' || s.country === schCountry) &&
-        (!q || s.name.toLowerCase().includes(q))
-    );
-  }, [schCountry, schQuery]);
+  const uniTotalPages = Math.max(1, Math.ceil(filteredUnis.length / UNI_PAGE_SIZE));
+  const safeUniPage = Math.min(uniPage, uniTotalPages);
+  const pagedUnis = useMemo(() => {
+    const start = (safeUniPage - 1) * UNI_PAGE_SIZE;
+    return filteredUnis.slice(start, start + UNI_PAGE_SIZE);
+  }, [filteredUnis, safeUniPage]);
 
-  const goBookSession = (e) => {
+  const uniRangeStart = filteredUnis.length === 0 ? 0 : (safeUniPage - 1) * UNI_PAGE_SIZE + 1;
+  const uniRangeEnd = Math.min(safeUniPage * UNI_PAGE_SIZE, filteredUnis.length);
+
+  const goToUniPage = (page) => {
+    setUniPage(Math.min(Math.max(1, page), uniTotalPages));
+    document.getElementById('universities-table')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  const updateField = (field, value) => {
+    setForm((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    navigate('/', { hash: 'book' });
-    setTimeout(() => {
-      document.getElementById('book')?.scrollIntoView({ behavior: 'smooth' });
-    }, 100);
+    if (!form.name.trim() || !form.phone.trim() || !form.email.trim()) {
+      toast.error('Please fill in your name, phone, and email.');
+      return;
+    }
+    if (!form.age.trim() || !form.address.trim()) {
+      toast.error('Please fill in your age and address.');
+      return;
+    }
+    if (!form.education || !form.currentStatus) {
+      toast.error('Please select your education and current status.');
+      return;
+    }
+    if (!form.preferredCountries.trim()) {
+      toast.error('Please enter at least one preferred country.');
+      return;
+    }
+    if (!form.budget || !form.timeline) {
+      toast.error('Please select your budget and timeline.');
+      return;
+    }
+
+    const countries = form.preferredCountries
+      .split(',')
+      .map((c) => c.trim())
+      .filter(Boolean);
+
+    setSubmitting(true);
+    try {
+      const payload = {
+        name: form.name.trim(),
+        phone: form.phone.trim(),
+        email: form.email.trim(),
+        age: form.age.trim(),
+        address: form.address.trim(),
+        education: form.education,
+        currentStatus: form.currentStatus,
+        skills: form.skills.trim(),
+        preferredCountries: countries,
+        budget: form.budget,
+        timeline: form.timeline,
+        notes: form.notes.trim(),
+      };
+
+      const res = await fetch(`${API_URL}/api/university-leads`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(data.message || 'Failed to save your details');
+      }
+
+      toast.success('Submitted successfully! You can fill a new form now.');
+      setForm(emptyForm());
+      setFormKey((k) => k + 1);
+      document.getElementById('book-session-form')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    } catch (err) {
+      toast.error(err.message || 'Something went wrong. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -148,23 +268,18 @@ const UniversitiesScholarships = () => {
       <section className="usd-hero">
         <div className="usd-hero-badge">Study Abroad — 2026–27 Directory</div>
         <h1>
-          Universities &amp; <span className="green">scholarships</span>,
+          Universities &amp; <span className="green">flagship awards</span>,
           <br />
           all in one clean list.
         </h1>
         <p>
-          147 globally recognised universities and 39 scholarships across 11 countries. Search,
-          filter by country, and go straight to the official page — no agent needed to see any of
-          this.
+          147 globally recognised universities across 11 countries. Search, filter by country, and
+          see notable scholarships linked to each campus — no agent needed to browse this list.
         </p>
         <div className="usd-hero-stats">
           <div className="usd-stat">
             <h3>147</h3>
             <p>Universities listed</p>
-          </div>
-          <div className="usd-stat">
-            <h3>39</h3>
-            <p>Scholarships listed</p>
           </div>
           <div className="usd-stat">
             <h3>11</h3>
@@ -188,32 +303,44 @@ const UniversitiesScholarships = () => {
             ))}
           </div>
           <div className="usd-guide-note">
-            University lists reflect globally recognised (tier-one) institutions. Scholarship
-            deadlines and amounts shown are for the 2026–27 cycle and can change — always confirm on
-            the official website before applying.
+            University lists reflect globally recognised (tier-one) institutions. Scholarship names
+            shown next to each university are indicative and can change — always confirm on the
+            official website before applying.
           </div>
         </div>
       </section>
 
-      <section className="usd-section usd-alt">
+      <section className="usd-section usd-alt" id="universities-table">
         <div className="usd-section-title">
           <h2>Universities</h2>
           <p>Filter by country or search by name</p>
         </div>
-        <div className="usd-filter-bar">
-          <FilterPills countries={UNI_COUNTRIES} active={uniCountry} onSelect={setUniCountry} />
-          <input
-            type="search"
-            className="usd-search-input"
-            value={uniQuery}
-            onChange={(e) => setUniQuery(e.target.value)}
-            placeholder="Search university or city..."
-            aria-label="Search universities"
-          />
+        <div className="usd-list-toolbar">
+          <div className="usd-filter-bar">
+            <FilterPills
+              countries={UNI_COUNTRIES}
+              active={uniCountry}
+              onSelect={(country) => {
+                setUniCountry(country);
+                setUniPage(1);
+              }}
+            />
+            <input
+              type="search"
+              className="usd-search-input"
+              value={uniQuery}
+              onChange={(e) => setUniQuery(e.target.value)}
+              placeholder="Search university or city..."
+              aria-label="Search universities"
+            />
+          </div>
+          <p className="usd-result-count">
+            {filteredUnis.length === 0
+              ? `0 of ${UNIVERSITIES.length} universities`
+              : `Showing ${uniRangeStart}–${uniRangeEnd} of ${filteredUnis.length} universities`}
+          </p>
         </div>
-        <p className="usd-result-count">
-          {filteredUnis.length} of {UNIVERSITIES.length} universities
-        </p>
+
         <div className="usd-table-wrap">
           <table>
             <thead>
@@ -226,96 +353,269 @@ const UniversitiesScholarships = () => {
               </tr>
             </thead>
             <tbody>
-              {filteredUnis.map((u) => (
-                <tr key={`${u.country}-${u.name}`}>
-                  <td className="usd-cell-country">{u.country}</td>
-                  <td className="usd-cell-name">{u.name}</td>
-                  <td>{u.location}</td>
-                  <td className="usd-cell-muted">{u.type}</td>
-                  <td>{u.scholarships}</td>
+              {pagedUnis.length === 0 ? (
+                <tr>
+                  <td colSpan={5} className="usd-empty-cell">
+                    No universities match your filters.
+                  </td>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </section>
-
-      <section className="usd-section">
-        <div className="usd-section-title">
-          <h2>Scholarships</h2>
-          <p>Filter by country, check the deadline, click through to the official page</p>
-        </div>
-        <div className="usd-filter-bar">
-          <FilterPills countries={SCH_COUNTRIES} active={schCountry} onSelect={setSchCountry} />
-          <input
-            type="search"
-            className="usd-search-input"
-            value={schQuery}
-            onChange={(e) => setSchQuery(e.target.value)}
-            placeholder="Search scholarship name..."
-            aria-label="Search scholarships"
-          />
-        </div>
-        <p className="usd-result-count">
-          {filteredSchs.length} of {SCHOLARSHIPS.length} scholarships
-        </p>
-        <div className="usd-table-wrap">
-          <table>
-            <thead>
-              <tr>
-                <th>Country</th>
-                <th>Scholarship</th>
-                <th>Provider</th>
-                <th>Level</th>
-                <th>Covers</th>
-                <th>Who it&apos;s for</th>
-                <th>Deadline (2026–27)</th>
-                <th>Official site</th>
-              </tr>
-            </thead>
-            <tbody>
-              {filteredSchs.map((s) => {
-                const href = siteHref(s.site);
-                return (
-                  <tr key={`${s.country}-${s.name}`}>
-                    <td className="usd-cell-country">{s.country}</td>
-                    <td className="usd-cell-name">{s.name}</td>
-                    <td>{s.provider}</td>
-                    <td className="usd-cell-muted">{s.level}</td>
-                    <td>{s.covers}</td>
-                    <td>{s.who}</td>
-                    <td className="usd-cell-muted">{s.deadline}</td>
+              ) : (
+                pagedUnis.map((u) => (
+                  <tr key={`${u.country}-${u.name}`}>
                     <td>
-                      {href ? (
-                        <a href={href} target="_blank" rel="noopener noreferrer">
-                          {s.site} ↗
-                        </a>
-                      ) : (
-                        <span className="usd-cell-muted">{s.site}</span>
-                      )}
+                      <span className="usd-country-badge">{u.country}</span>
                     </td>
+                    <td className="usd-cell-name">{u.name}</td>
+                    <td className="usd-cell-location">{u.location}</td>
+                    <td>
+                      <span className="usd-type-badge">{u.type}</span>
+                    </td>
+                    <td className="usd-cell-scholarships">{u.scholarships}</td>
                   </tr>
-                );
-              })}
+                ))
+              )}
             </tbody>
           </table>
         </div>
+
+        {filteredUnis.length > UNI_PAGE_SIZE && (
+          <div className="usd-pagination">
+            <button
+              type="button"
+              className="usd-page-btn"
+              onClick={() => goToUniPage(safeUniPage - 1)}
+              disabled={safeUniPage <= 1}
+            >
+              Previous
+            </button>
+            <div className="usd-page-numbers" role="navigation" aria-label="Universities pagination">
+              {Array.from({ length: uniTotalPages }, (_, i) => i + 1).map((page) => (
+                <button
+                  key={page}
+                  type="button"
+                  className={`usd-page-num${safeUniPage === page ? ' active' : ''}`}
+                  onClick={() => goToUniPage(page)}
+                  aria-current={safeUniPage === page ? 'page' : undefined}
+                >
+                  {page}
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              className="usd-page-btn"
+              onClick={() => goToUniPage(safeUniPage + 1)}
+              disabled={safeUniPage >= uniTotalPages}
+            >
+              Next
+            </button>
+          </div>
+        )}
       </section>
 
-      <section className="usd-section usd-alt">
-        <div className="usd-cta-box">
-          <h3>Not sure which of these fit your profile?</h3>
+      <section className="usd-section" id="book-session-form">
+        <div className="usd-section-title">
+          <h2>Share your details</h2>
           <p>
-            147 universities and 39 scholarships is a lot to narrow down alone. Book a session and
-            we&apos;ll help you shortlist against your grades, budget, and timeline.
+            Fill in your profile so we can help shortlist universities and scholarships that fit
+            your grades, budget, and timeline.
           </p>
-          <a href="/#book" onClick={goBookSession}>
-            Book a session
-          </a>
-          <Link to="/study-abroad-documents" className="usd-cta-secondary">
-            Upload study abroad documents
-          </Link>
         </div>
+
+        <form className="usd-form-box" onSubmit={handleSubmit} key={formKey}>
+          <div className="usd-form-head">
+            <h3>Enquiry form</h3>
+            <p>Tell us about yourself — our team will follow up with suitable options.</p>
+          </div>
+
+          <div className="usd-form-section">
+            <h4>Personal details</h4>
+            <div className="usd-form-row">
+              <div className="usd-form-group">
+                <label htmlFor="usd-name">
+                  Full name <span className="req">*</span>
+                </label>
+                <input
+                  id="usd-name"
+                  type="text"
+                  value={form.name}
+                  onChange={(e) => updateField('name', e.target.value)}
+                  placeholder="Enter your full name"
+                  required
+                />
+              </div>
+              <div className="usd-form-group">
+                <label htmlFor="usd-phone">
+                  Phone / WhatsApp <span className="req">*</span>
+                </label>
+                <input
+                  id="usd-phone"
+                  type="tel"
+                  value={form.phone}
+                  onChange={(e) => updateField('phone', e.target.value)}
+                  placeholder="+91 98765 43210"
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="usd-form-row">
+              <div className="usd-form-group">
+                <label htmlFor="usd-email">
+                  Email address <span className="req">*</span>
+                </label>
+                <input
+                  id="usd-email"
+                  type="email"
+                  value={form.email}
+                  onChange={(e) => updateField('email', e.target.value)}
+                  placeholder="your@email.com"
+                  required
+                />
+              </div>
+              <div className="usd-form-group">
+                <label htmlFor="usd-age">
+                  Age <span className="req">*</span>
+                </label>
+                <input
+                  id="usd-age"
+                  type="number"
+                  min="14"
+                  max="60"
+                  value={form.age}
+                  onChange={(e) => updateField('age', e.target.value)}
+                  placeholder="e.g. 22"
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="usd-form-group">
+              <label htmlFor="usd-address">
+                Address / City / State <span className="req">*</span>
+              </label>
+              <input
+                id="usd-address"
+                type="text"
+                value={form.address}
+                onChange={(e) => updateField('address', e.target.value)}
+                placeholder="Your city, state, country"
+                required
+              />
+            </div>
+          </div>
+
+          <div className="usd-form-section">
+            <h4>Education &amp; profile</h4>
+            <div className="usd-form-row">
+              <div className="usd-form-group">
+                <label htmlFor="usd-education">
+                  Highest education <span className="req">*</span>
+                </label>
+                <CustomSelect
+                  id="usd-education"
+                  className="usd-custom-select"
+                  value={form.education}
+                  onChange={(e) => updateField('education', e.target.value)}
+                  options={EDUCATION_OPTIONS}
+                  placeholder="Select education"
+                  required
+                />
+              </div>
+              <div className="usd-form-group">
+                <label htmlFor="usd-status">
+                  Current status <span className="req">*</span>
+                </label>
+                <CustomSelect
+                  id="usd-status"
+                  className="usd-custom-select"
+                  value={form.currentStatus}
+                  onChange={(e) => updateField('currentStatus', e.target.value)}
+                  options={STATUS_OPTIONS}
+                  placeholder="Select status"
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="usd-form-group">
+              <label htmlFor="usd-skills">Skills / trade (if any)</label>
+              <input
+                id="usd-skills"
+                type="text"
+                value={form.skills}
+                onChange={(e) => updateField('skills', e.target.value)}
+                placeholder="e.g. IELTS 7.0, coding, accounting..."
+              />
+            </div>
+          </div>
+
+          <div className="usd-form-section">
+            <h4>Study abroad preferences</h4>
+            <div className="usd-form-group">
+              <label htmlFor="usd-countries">
+                Preferred countries <span className="req">*</span>
+              </label>
+              <input
+                id="usd-countries"
+                type="text"
+                value={form.preferredCountries}
+                onChange={(e) => updateField('preferredCountries', e.target.value)}
+                placeholder="e.g. Australia, Canada, UK"
+                required
+              />
+            </div>
+
+            <div className="usd-form-row">
+              <div className="usd-form-group">
+                <label htmlFor="usd-budget">
+                  Budget <span className="req">*</span>
+                </label>
+                <CustomSelect
+                  id="usd-budget"
+                  className="usd-custom-select"
+                  value={form.budget}
+                  onChange={(e) => updateField('budget', e.target.value)}
+                  options={BUDGET_OPTIONS}
+                  placeholder="Select budget range"
+                  required
+                />
+              </div>
+              <div className="usd-form-group">
+                <label htmlFor="usd-timeline">
+                  Timeline <span className="req">*</span>
+                </label>
+                <CustomSelect
+                  id="usd-timeline"
+                  className="usd-custom-select"
+                  value={form.timeline}
+                  onChange={(e) => updateField('timeline', e.target.value)}
+                  options={TIMELINE_OPTIONS}
+                  placeholder="Select timeline"
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="usd-form-group usd-form-group-last">
+              <label htmlFor="usd-notes">Anything specific you want to discuss?</label>
+              <textarea
+                id="usd-notes"
+                rows={4}
+                value={form.notes}
+                onChange={(e) => updateField('notes', e.target.value)}
+                placeholder="Preferred course, grades/CGPA, scholarship goals, questions..."
+              />
+            </div>
+          </div>
+
+          <button type="submit" className="usd-submit-btn" disabled={submitting}>
+            {submitting ? 'Submitting...' : 'Submit details'}
+          </button>
+          <p className="usd-form-note">
+            Free enquiry — no payment required. Our team typically responds within 24 hours.
+          </p>
+        </form>
       </section>
 
       <SiteFooter />

@@ -126,7 +126,7 @@ const StudyAbroadGuides = () => {
         <div className="guides-vol-cta">
           <p>Ready to talk through your options?</p>
           <Link to="/study-abroad-documents" className="guides-btn-primary">
-            Upload study abroad documents
+            Apply for study abroad
           </Link>
         </div>
       </section>

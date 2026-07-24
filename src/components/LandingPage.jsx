@@ -771,7 +771,7 @@ const LandingPage = ({ onAdminClick }) => {
           <p>Many students spend lakhs on courses overseas only to discover they can't work after graduation. RouteUp helps you choose a course where you can study, work, and potentially settle.</p>
           <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', justifyContent: 'center' }}>
             <Link to="/study-abroad-documents" className="hero-cta" style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center' }}>
-              Document Checklist
+              Apply Study Abroad
             </Link>
             <button onClick={scrollToForm}>Get Study Abroad Guidance</button>
           </div>

@@ -1,18 +1,10 @@
-import React, { useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { Check, Upload } from 'lucide-react';
 import SiteNavbar from './SiteNavbar';
 import SiteFooter from './SiteFooter';
 import { API_URL } from '../config';
-import {
-  STUDY_ABROAD_COUNTRIES,
-  getAllStudyAbroadDocs,
-  getStudyAbroadSections,
-} from '../data/studyAbroadData';
-
-const MAX_FILE_BYTES = 10 * 1024 * 1024;
-const MAX_TOTAL_BYTES = 100 * 1024 * 1024;
+import { STUDY_ABROAD_COUNTRIES } from '../data/studyAbroadData';
 
 const StudyAbroadDocuments = () => {
   const [name, setName] = useState('');
@@ -21,10 +13,6 @@ const StudyAbroadDocuments = () => {
   const [course, setCourse] = useState('');
   const [university, setUniversity] = useState('');
   const [country, setCountry] = useState('');
-  const [docTitle, setDocTitle] = useState('');
-  const [fileName, setFileName] = useState('');
-  const [selectedFile, setSelectedFile] = useState(null);
-  const [uploaded, setUploaded] = useState({});
   const [submitting, setSubmitting] = useState(false);
   const [formKey, setFormKey] = useState(0);
 
@@ -35,55 +23,8 @@ const StudyAbroadDocuments = () => {
     setCourse('');
     setUniversity('');
     setCountry('');
-    setDocTitle('');
-    setFileName('');
-    setSelectedFile(null);
-    setUploaded({});
     setFormKey((key) => key + 1);
     window.scrollTo({ top: 0, behavior: 'smooth' });
-  };
-
-  const sections = useMemo(() => getStudyAbroadSections(country), [country]);
-  const allDocs = useMemo(() => getAllStudyAbroadDocs(country), [country]);
-  const uploadedCount = allDocs.filter((doc) => uploaded[doc]?.file).length;
-  const totalCount = allDocs.length;
-  const progressPct = totalCount ? Math.round((uploadedCount / totalCount) * 100) : 0;
-  const missingDocs = useMemo(
-    () => allDocs.filter((doc) => !uploaded[doc]?.file),
-    [allDocs, uploaded]
-  );
-  const allDocsUploaded = Boolean(country) && allDocs.length > 0 && missingDocs.length === 0;
-
-  const handleCountryChange = (value) => {
-    setCountry(value);
-    setUploaded({});
-    setSelectedFile(null);
-    setFileName('');
-    if (value) {
-      const first = getAllStudyAbroadDocs(value)[0] || '';
-      setDocTitle(first);
-    } else {
-      setDocTitle('');
-    }
-  };
-
-  const handleAddDocument = () => {
-    if (!country || !docTitle) return;
-    if (!selectedFile) {
-      toast.error('Please choose a file to add this document.');
-      return;
-    }
-    if (selectedFile.size > MAX_FILE_BYTES) {
-      toast.error('Each file must be under 10MB.');
-      return;
-    }
-    setUploaded((prev) => ({
-      ...prev,
-      [docTitle]: { fileName: selectedFile.name, file: selectedFile },
-    }));
-    setSelectedFile(null);
-    setFileName('');
-    toast.success('Document added');
   };
 
   const handleSubmit = async () => {
@@ -100,15 +41,6 @@ const StudyAbroadDocuments = () => {
       return;
     }
 
-    const files = allDocs
-      .filter((title) => uploaded[title]?.file)
-      .map((title) => uploaded[title].file);
-    const totalSize = files.reduce((sum, file) => sum + (file.size || 0), 0);
-    if (totalSize > MAX_TOTAL_BYTES) {
-      toast.error('Total upload size must be under 100MB. Please compress larger files.');
-      return;
-    }
-
     setSubmitting(true);
     try {
       const formData = new FormData();
@@ -118,19 +50,8 @@ const StudyAbroadDocuments = () => {
       formData.append('applyingCourse', course.trim());
       formData.append('targetUniversity', university.trim());
       formData.append('country', country);
-      formData.append('totalRequired', String(totalCount));
-
-      // Include full checklist so admin can see uploaded + missing titles
-      const meta = allDocs.map((title) => {
-        const info = uploaded[title];
-        return {
-          title,
-          fileName: info?.fileName || '',
-          attached: Boolean(info?.file),
-        };
-      });
-      formData.append('documentMeta', JSON.stringify(meta));
-      files.forEach((file) => formData.append('documents', file));
+      formData.append('totalRequired', '0');
+      formData.append('documentMeta', JSON.stringify([]));
 
       const res = await fetch(`${API_URL}/api/study-abroad-leads`, {
         method: 'POST',
@@ -138,9 +59,6 @@ const StudyAbroadDocuments = () => {
       });
 
       if (!res.ok) {
-        if (res.status === 413) {
-          throw new Error('Files are too large for the server. Please upload smaller files.');
-        }
         const err = await res.json().catch(() => ({}));
         throw new Error(err.message || 'Failed to submit');
       }
@@ -159,15 +77,15 @@ const StudyAbroadDocuments = () => {
       <SiteNavbar active="study-abroad" />
 
       <section className="pr-hero">
-        <div className="pr-hero-badge">Study Abroad — Document Upload</div>
+        <div className="pr-hero-badge">Study Abroad — Application</div>
         <h1>
           Your study abroad
           <br />
-          <span className="green">document checklist</span>, sorted.
+          <span className="green">application</span>, started right.
         </h1>
         <p>
-          Tell us your course and destination country and we&apos;ll show the exact documents your
-          university and visa application need — then upload them here for our team to review.
+          Tell us your course and destination country. Our team will review your profile and request
+          any documents needed for your country by email.
         </p>
         <div className="pr-disclaimer">
           <strong>Note:</strong> Every university and country has its own final checklist, and
@@ -175,7 +93,7 @@ const StudyAbroadDocuments = () => {
           specific university&apos;s admissions portal or visa office instructions.
         </div>
         <div className="pr-missing-banner">
-          <span>Missing a document? See why each one matters — and funds required by country.</span>
+          <span>Want to understand what documents usually matter — and funds required by country?</span>
           <Link to="/study-abroad-why-documents" className="pr-missing-btn">
             Why these documents →
           </Link>
@@ -244,7 +162,7 @@ const StudyAbroadDocuments = () => {
               <select
                 className="pr-select"
                 value={country}
-                onChange={(e) => handleCountryChange(e.target.value)}
+                onChange={(e) => setCountry(e.target.value)}
               >
                 <option value="">Select destination country</option>
                 {STUDY_ABROAD_COUNTRIES.map((c) => (
@@ -252,94 +170,7 @@ const StudyAbroadDocuments = () => {
                 ))}
               </select>
             </div>
-            {country && (
-              <div className="pr-occ-info">
-                <span className="pr-pill primary">
-                  {totalCount} documents typically required for {country}
-                </span>
-              </div>
-            )}
           </div>
-
-          {country && (
-            <>
-              <div className="pr-card">
-                <h3 className="pr-card-title">Upload a document</h3>
-                <p className="pr-upload-required-note">
-                  Documents are optional — upload what you have now. Yellow = not uploaded yet, green = uploaded.
-                  You can submit and book a session even if some files are still missing.
-                </p>
-                <div className="pr-upload-row">
-                  <select
-                    className="pr-select"
-                    value={docTitle}
-                    onChange={(e) => setDocTitle(e.target.value)}
-                  >
-                    {sections.map((section) => (
-                      <optgroup key={section.title} label={section.title}>
-                        {section.docs.map((d) => (
-                          <option key={d} value={d}>
-                            {uploaded[d]?.file ? `✓ ${d}` : d}
-                          </option>
-                        ))}
-                      </optgroup>
-                    ))}
-                  </select>
-                  <label className="pr-file-btn">
-                    <input
-                      type="file"
-                      accept=".pdf"
-                      onChange={(e) => {
-                        const file = e.target.files?.[0] || null;
-                        setSelectedFile(file);
-                        setFileName(file?.name || '');
-                      }}
-                    />
-                    {fileName || 'Choose file'}
-                  </label>
-                  <button type="button" className="pr-add-btn" onClick={handleAddDocument}>
-                    <Upload size={16} />
-                    Add document
-                  </button>
-                </div>
-              </div>
-
-              <div className="pr-progress-row">
-                <div className="pr-progress-track">
-                  <div className="pr-progress-bar" style={{ width: `${progressPct}%` }} />
-                </div>
-                <span className="pr-progress-text">
-                  {uploadedCount} of {totalCount} uploaded
-                  {!allDocsUploaded && (
-                    <span className="pr-progress-missing"> — {missingDocs.length} still missing</span>
-                  )}
-                </span>
-              </div>
-
-              {sections.map((section) => (
-                <div className="pr-card" key={section.title}>
-                  <p className="pr-label" style={{ color: '#0d7c3d', textTransform: 'uppercase', letterSpacing: '0.4px', fontSize: 13 }}>
-                    {section.title} — optional
-                  </p>
-                  {section.docs.map((doc) => (
-                    <div className="pr-check-row" key={doc}>
-                      <span className="pr-check-doc-label">
-                        <span className={`pr-check-dot ${uploaded[doc]?.file ? 'done' : 'pending'}`} />
-                        <span>{doc}</span>
-                      </span>
-                      {uploaded[doc]?.file ? (
-                        <span className="pr-check-ok">
-                          <Check size={14} /> {uploaded[doc].fileName}
-                        </span>
-                      ) : (
-                        <span className="pr-check-pending">Optional — not uploaded</span>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              ))}
-            </>
-          )}
 
           <button
             type="button"
@@ -350,12 +181,12 @@ const StudyAbroadDocuments = () => {
             {submitting
               ? 'Saving...'
               : country
-                ? 'Submit & continue'
+                ? 'Submit application'
                 : 'Select a country to continue'}
           </button>
           <p className="pr-secure-note">
-            Your documents are reviewed by our team before your paid advisory session. You&apos;ll still
-            complete payment on the Book Session page.
+            After you submit, our team will connect with you and request any documents needed for
+            your country by email. You&apos;ll still complete payment on the Book Session page.
           </p>
         </div>
       </section>
